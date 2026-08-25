@@ -1,0 +1,95 @@
+import { useNavigate } from 'react-router-dom'
+import Box from '@mui/material/Box'
+import Paper from '@mui/material/Paper'
+import Typography from '@mui/material/Typography'
+import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
+import IconButton from '@mui/material/IconButton'
+import Tooltip from '@mui/material/Tooltip'
+import Avatar from '@mui/material/Avatar'
+import LightModeIcon from '@mui/icons-material/LightMode'
+import DarkModeIcon from '@mui/icons-material/DarkMode'
+import { useAuthStore, selectFullName, selectInitials, selectIsAdmin, selectIsManager } from '../auth.store'
+import { useUiStore } from '@/shared/ui/ui.store'
+import { useHasPermission } from '@/features/roles/roles.store'
+
+export function LandingPage(): React.JSX.Element {
+  const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const fullName = useAuthStore(selectFullName)
+  const initials = useAuthStore(selectInitials)
+  const isAdmin = useAuthStore(selectIsAdmin)
+  const isManager = useAuthStore(selectIsManager)
+  const logout = useAuthStore((s) => s.logout)
+  const themeMode = useUiStore((s) => s.themeMode)
+  const toggleTheme = useUiStore((s) => s.toggleTheme)
+  const canReadUsers = useHasPermission('users.read')
+  const canReadRoles = useHasPermission('roles.read')
+
+  async function handleLogout(): Promise<void> {
+    await logout() // always clears local session (feat-01 §3.4)
+    navigate('/login', { replace: true })
+  }
+
+  const pills: string[] = []
+  if (isAdmin) pills.push('Admin')
+  if (isManager) pills.push('Manager')
+  pills.push('User')
+
+  return (
+    <Box sx={{ maxWidth: 560, mx: 'auto', mt: 8, px: 2, position: 'relative' }}>
+      <Box sx={{ position: 'absolute', top: 0, right: 0 }}>
+        <Tooltip title={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
+          <IconButton onClick={toggleTheme} aria-label="Toggle theme">
+            {themeMode === 'light' ? <DarkModeIcon /> : <LightModeIcon />}
+          </IconButton>
+        </Tooltip>
+      </Box>
+
+      <Paper elevation={3} sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Avatar sx={{ width: 44, height: 44 }}>{initials}</Avatar>
+            <Box>
+              <Typography variant="h6" sx={{ display: 'block' }}>
+                {fullName}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {user?.email}
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {canReadUsers && (
+              <Button variant="outlined" onClick={() => navigate('/users')}>
+                Users
+              </Button>
+            )}
+            {canReadRoles && (
+              <Button variant="outlined" onClick={() => navigate('/roles')}>
+                Roles
+              </Button>
+            )}
+            <Button variant="outlined" onClick={() => navigate('/profile')}>
+              Profile
+            </Button>
+            <Button variant="contained" color="primary" onClick={handleLogout}>
+              Log out
+            </Button>
+          </Box>
+        </Box>
+
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="h6" component="h2" gutterBottom>
+            Roles
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {pills.map((role) => (
+              <Chip key={role} label={role} size="small" />
+            ))}
+          </Box>
+        </Box>
+      </Paper>
+    </Box>
+  )
+}
