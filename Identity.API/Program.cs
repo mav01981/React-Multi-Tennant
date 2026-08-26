@@ -51,6 +51,9 @@ builder.Services
 // Multi-tenancy persistence (EF Core) + tenant-scoped identity validator.
 builder.Services.AddIdentityInfrastructure(config);
 
+// Application-layer use-case handlers (business rules live here, not in endpoints).
+builder.Services.AddApplicationUseCases();
+
 // ── JWT bearer auth ─────────────────────────────────────────────────────
 // Note: AddIdentity above wires a cookie scheme as DefaultChallengeScheme.
 // We must override all defaults so protected endpoints return a JSON

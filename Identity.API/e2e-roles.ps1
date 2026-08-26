@@ -19,6 +19,7 @@ $suffix = [Guid]::NewGuid().ToString('N')
 
 # ── Admin login ──────────────────────────────────────────────
 $adminLogin = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'application/json' `
+    -Headers @{ 'X-Tenant-Id' = 'platform' } `
     -Body (@{ email = 'admin@example.com'; password = 'ChangeMe-Admin-1!' } | ConvertTo-Json)
 $adminHeaders = @{ Authorization = "Bearer $($adminLogin.accessToken)" }
 
@@ -46,6 +47,7 @@ Write-Output "    -> 201 Manager=$($mgr.id), User=$($usr.id)"
 
 Write-Output '[3] Manager: GET /users (users.read satisfied -> allowed)'
 $mgrLogin = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'application/json' `
+    -Headers @{ 'X-Tenant-Id' = 'platform' } `
     -Body (@{ email = $managerEmail; password = $managerPass } | ConvertTo-Json)
 $mgrHeaders = @{ Authorization = "Bearer $($mgrLogin.accessToken)" }
 $mgrList = Invoke-RestMethod -Uri "$base/users?page=1&pageSize=10" -Headers $mgrHeaders
@@ -66,6 +68,7 @@ Write-Output "    -> 403 $noRolesReadCode"
 
 Write-Output '[6] User: GET /users (no users.read -> 403)'
 $usrLogin = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'application/json' `
+    -Headers @{ 'X-Tenant-Id' = 'platform' } `
     -Body (@{ email = $userEmail; password = $managerPass } | ConvertTo-Json)
 $usrHeaders = @{ Authorization = "Bearer $($usrLogin.accessToken)" }
 $usrBlocked = Send-Api '/users' 'GET' $null $usrHeaders

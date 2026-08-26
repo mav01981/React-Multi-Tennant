@@ -1,5 +1,5 @@
 name: Backend Build 
-
+run-name: Backend Build (net10.0) - ${{ github.workflow }} / ${{ github.ref_name }} / ${{ github.event_name }} / ${{ github.run_number }}
 on:
   push:
     branches: ['**']

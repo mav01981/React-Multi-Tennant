@@ -54,7 +54,9 @@ public class PermissionsTests
         // Assert
         Assert.Contains(Permissions.TenantsRead, perms);
         Assert.Contains(Permissions.TenantsWrite, perms);
-        Assert.DoesNotContain(Permissions.UsersDelete, perms);
+        Assert.Contains(Permissions.UsersRead, perms);
+        Assert.Contains(Permissions.UsersWrite, perms);
+        Assert.Contains(Permissions.UsersDelete, perms);
     }
 
     [Fact]

@@ -16,6 +16,7 @@ function Send-Api {
 }
 
 $login = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'application/json' `
+    -Headers @{ 'X-Tenant-Id' = 'platform' } `
     -Body (@{ email = 'admin@example.com'; password = 'ChangeMe-Admin-1!' } | ConvertTo-Json)
 $headers = @{ Authorization = "Bearer $($login.accessToken)" }
 
@@ -25,7 +26,7 @@ if ($list.page -ne 1 -or $list.pageSize -ne 10 -or $list.totalCount -lt 1) { thr
 Write-Output "    -> 200, items=$($list.items.Count), total=$($list.totalCount)"
 
 $suffix = [Guid]::NewGuid().ToString('N')
-$body = @{ email = "e2e-$suffix@example.com"; firstName = 'E2E'; lastName = 'User'; password = 'ChangeMe-E2E-1!'; roles = @('User') } | ConvertTo-Json
+$body = @{ email = "e2e-$suffix@example.com"; firstName = 'E2E'; lastName = 'User'; password = 'ChangeMe-E2E-1!'; roles = @('ReadOnly') } | ConvertTo-Json
 Write-Output '[2] POST /users (create)'
 $created = Invoke-RestMethod -Uri "$base/users" -Method Post -Headers $headers -ContentType 'application/json' -Body $body
 Write-Output "    -> 201, id=$($created.id)"

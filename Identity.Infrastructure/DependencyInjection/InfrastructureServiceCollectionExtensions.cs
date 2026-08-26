@@ -34,6 +34,15 @@ public static class InfrastructureServiceCollectionExtensions
         services.RemoveAll(typeof(IUserValidator<ApplicationUser>));
         services.AddScoped<IUserValidator<ApplicationUser>, TenantUserValidator>();
 
+        // ── Application ports implemented over EF Core / Identity ──
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        services.AddScoped<ITenantRepository, TenantRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
+        services.AddScoped<IUserAccountService, UserAccountService>();
+        services.AddScoped<IRoleCatalog, RoleCatalog>();
+        services.AddScoped<IPermissionChecker, PermissionChecker>();
+
         return services;
     }
 

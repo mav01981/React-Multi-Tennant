@@ -18,6 +18,7 @@ function Send-Api {
 $oldPassword = 'ChangeMe-Admin-1!'
 $newPassword = 'ChangeMe-Profile-1!'
 $login = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'application/json' `
+    -Headers @{ 'X-Tenant-Id' = 'platform' } `
     -Body (@{ email = 'admin@example.com'; password = $oldPassword } | ConvertTo-Json)
 $headers = @{ Authorization = "Bearer $($login.accessToken)" }
 
@@ -46,7 +47,15 @@ Write-Output '    -> 204, existing session retained'
 
 Write-Output '[5] POST /auth/login (new password)'
 $newLogin = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'application/json' `
+    -Headers @{ 'X-Tenant-Id' = 'platform' } `
     -Body (@{ email = 'admin@example.com'; password = $newPassword } | ConvertTo-Json)
 Write-Output "    -> 200, $($newLogin.user.email)"
+
+# Revert the bootstrap password so the smoke suite stays idempotent/re-runnable.
+$revertHeaders = @{ Authorization = "Bearer $($newLogin.accessToken)" }
+$reverted = Send-Api '/users/me/password' 'POST' `
+    (@{ currentPassword = $newPassword; newPassword = $oldPassword } | ConvertTo-Json) $revertHeaders
+if ($reverted.Status -ne 204) { throw "Expected 204 reverting password, got $($reverted.Status)." }
+Write-Output '[6] POST /users/me/password (revert) -> 204, bootstrap password restored'
 
 Write-Output 'Feature 03 profile self-service smoke test passed.'

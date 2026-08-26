@@ -24,13 +24,26 @@ public static class Permissions
     /// <summary>The reserved role granted to the platform bootstrap super-admin.</summary>
     public const string PlatformAdminRole = "PlatformAdmin";
 
+    /// <summary>The per-tenant administrator role seeded by default for every tenant.</summary>
+    public const string TenantAdminRole = "Admin";
+
+    /// <summary>
+    /// Whether a role confers administrative standing over its tenant. Both
+    /// <see cref="TenantAdminRole"/> and <see cref="PlatformAdminRole"/> count, so the
+    /// "last active admin" invariant protects tenant admins and the platform root
+    /// account alike.
+    /// </summary>
+    public static bool IsAdministratorRole(string roleName) =>
+        roleName.Equals(TenantAdminRole, StringComparison.OrdinalIgnoreCase) ||
+        roleName.Equals(PlatformAdminRole, StringComparison.OrdinalIgnoreCase);
+
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> Map =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
         {
             ["Admin"] = [UsersRead, UsersWrite, UsersDelete, RolesRead, ProfileRead, ProfileWrite],
             ["Manager"] = [UsersRead, UsersWrite, ProfileRead, ProfileWrite],
             ["ReadOnly"] = [UsersRead, RolesRead, ProfileRead, ProfileWrite],
-            [PlatformAdminRole] = [TenantsRead, TenantsWrite, UsersRead, RolesRead, ProfileRead, ProfileWrite]
+            [PlatformAdminRole] = [TenantsRead, TenantsWrite, UsersRead, UsersWrite, UsersDelete, RolesRead, ProfileRead, ProfileWrite]
         };
 
     /// <summary>Resolves the permission set for a role name; unknown roles resolve to empty (no crash).</summary>

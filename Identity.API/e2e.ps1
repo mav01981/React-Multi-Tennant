@@ -16,7 +16,7 @@ function Send-Api {
 }
 
 Write-Output '[1] POST /auth/login (valid)'
-$login = Invoke-RestMethod -Uri "$base/login" -Method Post -ContentType 'application/json' -Body '{"email":"admin@example.com","password":"ChangeMe-Admin-1!"}'
+$login = Invoke-RestMethod -Uri "$base/login" -Method Post -ContentType 'application/json' -Headers @{ 'X-Tenant-Id' = 'platform' } -Body '{"email":"admin@example.com","password":"ChangeMe-Admin-1!"}'
 Write-Output ("    -> 200 OK, expiresIn=$($login.expiresIn), roles=$($login.user.roles -join ',')")
 $access   = $login.accessToken
 $refresh  = $login.refreshToken
