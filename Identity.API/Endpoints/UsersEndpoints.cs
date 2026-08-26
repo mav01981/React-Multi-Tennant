@@ -1,5 +1,9 @@
 using Identity.Api.Common;
-using Identity.Api.Data;
+using Identity.Application.Contracts;
+using Identity.Domain;
+using Identity.Domain.Entities;
+using Identity.Infrastructure.Identity;
+using Identity.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,15 +1,15 @@
 using System.Security.Claims;
-using Identity.Api.Common;
-using Identity.Api.Services;
+using Identity.Domain.Entities;
+using Identity.Infrastructure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
-namespace Identity.API.UnitTests;
+namespace Identity.Infrastructure.UnitTests;
 
 /// <summary>
 /// Verifies <see cref="TokenService"/>: refresh-token secrecy/hashing and access-token
-/// claim + signature output. 
+/// claim + signature output.
 /// </summary>
 public class TokenServiceTests
 {
@@ -32,8 +32,10 @@ public class TokenServiceTests
     public void CreateRefreshToken_Returns_Opaque_Token_Different_From_Hash()
     {
         // Arrange
+        var svc = CreateService();
+
         // Act
-        var (raw, hash) = TokenService.CreateRefreshToken();
+        var (raw, hash) = svc.CreateRefreshToken();
 
         // Assert
         Assert.False(string.IsNullOrEmpty(raw));
@@ -45,9 +47,11 @@ public class TokenServiceTests
     public void CreateRefreshToken_Generates_Unique_Tokens_Each_Call()
     {
         // Arrange
+        var svc = CreateService();
+
         // Act
-        var (raw1, _) = TokenService.CreateRefreshToken();
-        var (raw2, _) = TokenService.CreateRefreshToken();
+        var (raw1, _) = svc.CreateRefreshToken();
+        var (raw2, _) = svc.CreateRefreshToken();
 
         // Assert
         Assert.NotEqual(raw1, raw2);
@@ -57,10 +61,11 @@ public class TokenServiceTests
     public void HashRefreshToken_Is_Stable_And_Lossy()
     {
         // Arrange
-        var (raw, hash) = TokenService.CreateRefreshToken();
+        var svc = CreateService();
+        var (raw, hash) = svc.CreateRefreshToken();
 
         // Act
-        var rehashed = TokenService.HashRefreshToken(raw);
+        var rehashed = svc.HashRefreshToken(raw);
 
         // Assert
         Assert.Equal(hash, rehashed);

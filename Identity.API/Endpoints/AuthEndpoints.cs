@@ -1,8 +1,11 @@
 using Identity.Api.Common;
-using Identity.Api.Data;
+using Identity.Application.Abstractions;
+using Identity.Application.Contracts;
+using Identity.Domain.Entities;
+using Identity.Infrastructure.Identity;
+using Identity.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Identity.Api.Services;
 
 namespace Identity.Api.Endpoints;
 
@@ -25,7 +28,7 @@ public static class AuthEndpoints
         HttpContext http,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        TokenService tokens,
+        ITokenProvider tokens,
         AppDbContext db)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
@@ -66,7 +69,7 @@ public static class AuthEndpoints
         var now = DateTimeOffset.UtcNow;
         var roles = await userManager.GetRolesAsync(user);
         var access = tokens.CreateAccessToken(user, roles, now);
-        var (rawRefresh, refreshHash) = TokenService.CreateRefreshToken();
+        var (rawRefresh, refreshHash) = tokens.CreateRefreshToken();
 
         var family = new RefreshFamily { UserId = user.Id, TenantId = tenant.Id };
         db.RefreshFamilies.Add(family);
@@ -88,13 +91,13 @@ public static class AuthEndpoints
         RefreshRequest request,
         HttpContext http,
         UserManager<ApplicationUser> userManager,
-        TokenService tokens,
+        ITokenProvider tokens,
         AppDbContext db)
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
             return Error(http, 401, ErrorCodes.Unauthenticated, "Refresh token is required.");
 
-        var stored = await db.RefreshTokens.SingleOrDefaultAsync(t => t.TokenHash == TokenService.HashRefreshToken(request.RefreshToken));
+        var stored = await db.RefreshTokens.SingleOrDefaultAsync(t => t.TokenHash == tokens.HashRefreshToken(request.RefreshToken));
         if (stored is null)
             return Error(http, 401, ErrorCodes.RefreshTokenRevoked, "Refresh token is invalid.");
 
@@ -133,13 +136,13 @@ public static class AuthEndpoints
         // Rotate: revoke the presented token, mint a new descendant in the same family.
         var now = DateTimeOffset.UtcNow;
         stored.RevokedAt = now;
-        var (rawRefresh, _) = TokenService.CreateRefreshToken();
+        var (rawRefresh, _) = tokens.CreateRefreshToken();
         db.RefreshTokens.Add(new RefreshToken
         {
             FamilyId = family.Id,
             UserId = stored.UserId,
             TenantId = stored.TenantId,
-            TokenHash = TokenService.HashRefreshToken(rawRefresh),
+            TokenHash = tokens.HashRefreshToken(rawRefresh),
             CreatedAt = now,
             ExpiresAt = now.AddSeconds(tokens.RefreshTtlSeconds)
         });

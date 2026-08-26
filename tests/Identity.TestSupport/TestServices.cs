@@ -1,12 +1,13 @@
-using Identity.Api.Common;
-using Identity.Api.Data;
+using Identity.Domain.Entities;
+using Identity.Infrastructure.Identity;
+using Identity.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Identity.API.UnitTests;
+namespace Identity.TestSupport;
 
 /// <summary>
 /// Shared test fixture: spins up an isolated InMemory EF Core context plus a real

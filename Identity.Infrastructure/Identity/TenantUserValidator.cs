@@ -1,7 +1,8 @@
+using Identity.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace Identity.Api.Common;
+namespace Identity.Infrastructure.Identity;
 
 /// <summary>
 /// Tenant-scoped replacement for Identity's default <c>UserValidator</c>.

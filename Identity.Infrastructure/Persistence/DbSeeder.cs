@@ -1,8 +1,12 @@
-using Identity.Api.Common;
+using Identity.Domain;
+using Identity.Domain.Entities;
+using Identity.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace Identity.Api.Data;
+namespace Identity.Infrastructure.Persistence;
 
 /// <summary>
 /// Idempotent bootstrap seed :

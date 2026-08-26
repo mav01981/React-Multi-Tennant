@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Identity.API.UnitTests;
+namespace Identity.Api.UnitTests;
 
 /// <summary>Verifies the security response-header hardening middleware writes the expected headers.</summary>
 public class SecurityHeadersTests

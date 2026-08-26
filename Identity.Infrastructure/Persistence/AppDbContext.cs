@@ -1,9 +1,9 @@
+using Identity.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using Identity.Api.Common;
 
-namespace Identity.Api.Data;
+namespace Identity.Infrastructure.Persistence;
 
 public class AppDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
 {

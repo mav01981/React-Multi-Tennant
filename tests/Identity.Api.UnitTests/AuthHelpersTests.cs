@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Identity.Api.Common;
+using Identity.Domain;
+using Identity.TestSupport;
 using Microsoft.AspNetCore.Http;
 
-namespace Identity.API.UnitTests;
+namespace Identity.Api.UnitTests;
 
 /// <summary>Verifies claim-driven helpers in <see cref="AuthHelpers"/>.</summary>
 public class AuthHelpersTests : IDisposable

@@ -1,8 +1,8 @@
-using Identity.Api.Common;
+using Identity.Domain.Entities;
 
-namespace Identity.Api.Common;
+namespace Identity.Application.Contracts;
 
-/// <summary>Boundary DTOs.</summary>
+/// <summary>Boundary DTOs exposed over the HTTP API.</summary>
 public static class ApiContract
 {
     public const string BasePath = "/api/v1";

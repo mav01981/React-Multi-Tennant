@@ -1,7 +1,10 @@
-using Identity.Api.Common;
+using Identity.Domain;
+using Identity.Domain.Entities;
+using Identity.Infrastructure.Identity;
+using Identity.TestSupport;
 using Microsoft.EntityFrameworkCore;
 
-namespace Identity.API.UnitTests;
+namespace Identity.Infrastructure.UnitTests;
 
 /// <summary>
 /// Verifies tenant-scoped role operations in <see cref="TenantRoles"/>. Because role names

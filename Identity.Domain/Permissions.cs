@@ -1,4 +1,4 @@
-namespace Identity.Api.Common;
+namespace Identity.Domain;
 
 /// <summary>
 /// Central role → permission map == The backend authorizes at

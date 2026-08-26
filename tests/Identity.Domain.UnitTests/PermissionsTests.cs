@@ -1,6 +1,7 @@
-using Identity.Api.Common;
+using Identity.Domain;
 
-namespace Identity.API.UnitTests;
+namespace Identity.Domain.UnitTests;
+
 
 /// <summary>
 /// Verifies the central role → permission catalog. These are pure functions, so each

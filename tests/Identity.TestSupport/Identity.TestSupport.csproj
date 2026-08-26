@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared unit-test fixture/support types consumed by multiple test projects.
+       Not a runnable test project itself. -->
+  <PropertyGroup>
+    <RootNamespace>Identity.TestSupport</RootNamespace>
+    <IsTestProject>false</IsTestProject>
+    <GenerateProgramFile>false</GenerateProgramFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" Version="2.9.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Identity.Domain\Identity.Domain.csproj" />
+    <ProjectReference Include="..\..\Identity.Application\Identity.Application.csproj" />
+    <ProjectReference Include="..\..\Identity.Infrastructure\Identity.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

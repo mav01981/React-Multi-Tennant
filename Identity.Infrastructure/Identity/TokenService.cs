@@ -1,18 +1,21 @@
-using Identity.Api.Common;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Identity.Application.Abstractions;
+using Identity.Domain.Entities;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
-namespace Identity.Api.Services;
+namespace Identity.Infrastructure.Identity;
 
 /// <summary>
 /// Mints RS256 access JWTs and opaque, hashed refresh tokens.
 /// For local dev the RSA key is ephemeral and generated at startup;
 /// in production it is supplied via JWKS.
+/// Implements the <see cref="ITokenProvider"/> application port.
 /// </summary>
-public class TokenService
+public class TokenService : ITokenProvider
 {
     private readonly RsaSecurityKey _signingKey;
     private readonly string _issuer;
@@ -30,7 +33,9 @@ public class TokenService
         _refreshTtlSeconds = config.GetValue("Jwt:RefreshTtlSeconds", 2592000);
     }
 
+    /// <summary>RS256 signing key (exposed to the composition root for token validation).</summary>
     public RsaSecurityKey SigningKey => _signingKey;
+
     public string Issuer => _issuer;
     public string Audience => _audience;
     public int AccessTtlSeconds => _accessTtlSeconds;
@@ -70,7 +75,7 @@ public class TokenService
     }
 
     /// <summary>Creates an opaque refresh token plus its SHA-256 hash for at-rest storage.</summary>
-    public static (string Raw, string Hash) CreateRefreshToken()
+    public (string Raw, string Hash) CreateRefreshToken()
     {
         var bytes = RandomNumberGenerator.GetBytes(64);
         var raw = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -78,6 +83,6 @@ public class TokenService
         return (raw, hash);
     }
 
-    public static string HashRefreshToken(string raw) =>
+    public string HashRefreshToken(string raw) =>
         Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
 }

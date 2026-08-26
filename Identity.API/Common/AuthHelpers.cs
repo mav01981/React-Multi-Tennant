@@ -1,3 +1,5 @@
+using Identity.Domain;
+using Identity.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 
 namespace Identity.Api.Common;

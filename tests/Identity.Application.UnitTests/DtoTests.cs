@@ -1,6 +1,7 @@
-using Identity.Api.Common;
+using Identity.Application.Contracts;
+using Identity.Domain.Entities;
 
-namespace Identity.API.UnitTests;
+namespace Identity.Application.UnitTests;
 
 /// <summary>Verifies the DTO projection helpers (<see cref="UserDto.From"/> / <see cref="TenantDto.From"/>).</summary>
 public class DtoTests

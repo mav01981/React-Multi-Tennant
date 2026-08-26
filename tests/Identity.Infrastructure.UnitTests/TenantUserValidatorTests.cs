@@ -1,6 +1,8 @@
-using Identity.Api.Common;
+using Identity.Domain.Entities;
+using Identity.Infrastructure.Identity;
+using Identity.TestSupport;
 
-namespace Identity.API.UnitTests;
+namespace Identity.Infrastructure.UnitTests;
 
 /// <summary>
 /// Verifies <see cref="TenantUserValidator"/> enforces email/username uniqueness *within a tenant*,

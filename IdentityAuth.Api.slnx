@@ -1,4 +1,13 @@
 <Solution>
-  <Project Path="Identity.API.UnitTests/Identity.API.UnitTests.csproj" />
-  <Project Path="Identity.API/Identity.Api.csproj" DisplayName="Identity.API" />
+  <Folder Name="/tests/">
+    <Project Path="tests/Identity.Application.UnitTests/Identity.Application.UnitTests.csproj" />
+    <Project Path="tests/Identity.Api.UnitTests/Identity.Api.UnitTests.csproj" />
+    <Project Path="tests/Identity.Domain.UnitTests/Identity.Domain.UnitTests.csproj" />
+    <Project Path="tests/Identity.Infrastructure.UnitTests/Identity.Infrastructure.UnitTests.csproj" />
+    <Project Path="tests/Identity.TestSupport/Identity.TestSupport.csproj" />
+  </Folder>
+  <Project Path="Identity.API/Identity.API.csproj" />
+  <Project Path="Identity.Application/Identity.Application.csproj" />
+  <Project Path="Identity.Domain/Identity.Domain.csproj" />
+  <Project Path="Identity.Infrastructure/Identity.Infrastructure.csproj" />
 </Solution>

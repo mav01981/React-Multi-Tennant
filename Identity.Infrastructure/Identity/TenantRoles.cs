@@ -1,8 +1,10 @@
-using Identity.Api.Data;
+using Identity.Domain;
+using Identity.Domain.Entities;
+using Identity.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace Identity.Api.Common;
+namespace Identity.Infrastructure.Identity;
 
 /// <summary>
 /// Per-tenant role operations. Role names (Admin/Manager/ReadOnly) repeat in every
@@ -56,7 +58,7 @@ public static class TenantRoles
             {
                 return IdentityResult.Failed(new IdentityError { Code = "UnknownRole", Description = $"Unknown role '{name}'." });
             }
-           
+
             if (name.Equals(Permissions.PlatformAdminRole, StringComparison.OrdinalIgnoreCase))
                 return IdentityResult.Failed(new IdentityError { Code = "ForbiddenRole", Description = "The platform admin role cannot be assigned." });
 
