@@ -20,10 +20,19 @@ export function ProfilePage(): React.JSX.Element {
   const addToast = useUiStore((state) => state.addToast)
 
   useEffect(() => {
-    usersApi.getMe().then((current) => {
+    // The fetch effect only loads the user into the store. Deriving the form
+    // names is left to the single `[user]`-driven effect below, so there is
+    // exactly one source of truth for that local state.
+    const controller = new AbortController()
+    usersApi.getMe(controller.signal).then((current) => {
       useAuthStore.setState({ user: current })
-      setNames({ firstName: current.firstName, lastName: current.lastName })
-    }).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load profile'))
+    }).catch((err: unknown) => {
+      // Ignore errors caused by unmounting (abort) — the component is gone.
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? err.message : 'Failed to load profile')
+      }
+    })
+    return () => controller.abort()
   }, [])
 
   useEffect(() => {

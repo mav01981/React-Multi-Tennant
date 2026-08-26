@@ -818,7 +818,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: change-me
-      POSTGRES_DB: vueauth
+      POSTGRES_DB: reactauth
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -834,9 +834,9 @@ services:
       context: ./backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: "postgresql://postgres:change-me@db:5432/vueauth"
-      IDENTITY_ISSUER: "vueauth-identity"
-      IDENTITY_AUDIENCE: "vueauth-client"
+      DATABASE_URL: "postgresql://postgres:change-me@db:5432/reactauth"
+      IDENTITY_ISSUER: "reactauth-identity"
+      IDENTITY_AUDIENCE: "reactauth-client"
       ACCESS_TTL_SECONDS: 900
       REFRESH_TTL_SECONDS: 2592000
       JWKS_URL: ""
@@ -909,3 +909,85 @@ For the full list and accepted values mirror `specs/backend/be-identity-config.m
 | `ui` | Toasts, modals, layout, **theme mode** | localStorage (themeMode) / in-memory |
 
 **Bottom line:** Yes, we need dedicated state management. Zustand gives us type-safe, modular stores that scale from auth through admin CRUD to global UI — with minimal boilerplate, granular selector subscriptions for React performance, and a tiny API surface that keeps our components lean.
+---
+
+## 9. Multi-Tenancy (Extend Identity to be tenant-aware)
+
+Decisions (confirmed with product owner):
+- **Isolation model:** *Shared DB, row-level tenancy* — a `TenantId` column on every scoped
+  entity, carried on each request; every query scoped to the caller's tenant.
+- **Tenant model:** full `Tenants` table + a bootstrap **Platform** super-admin that can
+  create/suspend tenants. Every user belongs to **exactly one** tenant. Emails are unique
+  *per tenant*. Roles are scoped per tenant.
+
+### 9.1 Tenant identity & resolution
+
+| Phase | How tenant is obtained |
+|-------|------------------------|
+| At **login/logout pre-auth** | `X-Tenant-Id` header carries the tenant **slug** (e.g. `acme`); backend resolves it to a `Tenant`. |
+| On every **authenticated** call | `tid` JWT claim (authoritative). Never trust a client header after auth — the claim scope is what authorizes cross-tenant safety. |
+
+- `TokenService.CreateAccessToken` emits a `tid = user.TenantId` claim.
+- A small `AuthHelpers.GetTenantId(http)` reads the `tid` claim for all
+  tenant-scoped endpoints.
+
+### 9.2 Schema & entity changes
+
+```
+ApplicationUser : IdentityUser<Guid>   + TenantId (Guid, required), Tenant nav
+ApplicationRole : IdentityRole<Guid>   + TenantId (Guid, required)
+RefreshFamily                          + TenantId
+RefreshToken                           + TenantId
+Tenant                                NEW — Id, Name, DisplayName, Slug (unique), Status, timestamps
+```
+
+- Identity option `User.RequireUniqueEmail` → **off**; replaced by a composite unique
+  index `(TenantId, NormalizedEmail)` on `users`. Emails are unique within a tenant only.
+- Roles carry `TenantId` with composite unique `(TenantId, NormalizedName)`; the fixed
+  role catalog (Admin / Manager / ReadOnly) is seeded per tenant and permission map stays
+  code-based by role name.
+- Per-tenant role membership is managed via explicit scoped helpers (Identity's
+  `AddToRoleAsync`/`GetUsersInRoleAsync` assume globally-unique role names, which conflict
+  with per-tenant role rows) — see `TenantRoles.cs`.
+
+### 9.3 Tenant scoping rules per endpoint group
+
+| Endpoint | Scope rule |
+|----------|-----------|
+| `auth/*` | Resolve tenant from `X-Tenant-Id` (login) or `tid` claim; find users **within that tenant** |
+| `users/*` | All queries constrained to caller's `tid`; "last active admin" is tenant-local |
+| `roles/*` | List only roles whose `TenantId == tid` |
+| `tenants/*` (NEW) | **Platform** super-admin only: create / list / suspend tenants; each create seeds its default roles |
+
+### 9.4 Permissions / roles
+
+- Add `PlatformAdmin` role; `PlatformAdmin` gets `tenants.read` / `tenants.write`.
+- Assignable roles for normal users remain the per-tenant catalog (`Admin/Manager/ReadOnly`).
+
+### 9.5 Bootstrap seed
+
+1. Create the **platform** tenant (slug `platform`, reserved).
+2. Create its default roles (for Platform).
+3. Create the bootstrap `PlatformAdmin` user (from `Seed` config) in the *platform* tenant.
+4. On tenant creation (API or seed), seed that tenant's default roles.
+
+### 9.6 Frontend session
+
+- `auth` store persists `tenantId` alongside tokens; login request sends `X-Tenant-Id`.
+- `LoginPage` added tenant field/sub-path; `UserDto` and store expose `tenantId`.
+- `api/client` sends `X-Tenant-Id` on unauthenticated login/refresh; authenticated calls
+  rely on the token (`tid` claim) — matches backend authority.
+- Branding can later key off `tenantId`.
+
+### 9.7 API contract additions
+
+```
+POST /api/v1/auth/login   tenant via header X-Tenant-Id: <slug>
+POST /api/v1/auth/refresh body unchanged (tenant from stored token)
+GET/POST /api/v1/tenants  Platform only
+```
+
+### 9.8 Out of scope for v1
+- Schema- or DB-per-tenant isolation (Postgres schemas / catalog).
+- Self-serve tenant registration / billing / invites.
+- Per-tenant theming beyond using `tenantId`.

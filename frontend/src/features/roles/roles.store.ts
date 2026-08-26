@@ -4,7 +4,7 @@ import { rolesApi } from './roles.api'
 import { useAuthStore } from '@/features/auth/auth.store'
 
 /**
- * `roles` store — lazy on-demand cache (feat-04 §3, plan.md §1). Roles are static
+ * `roles` store — lazy on-demand cache. Roles are static
  * in v1, so they are fetched exactly once (`hasLoaded` guard) and cached for the
  * rest of the session; role dropdowns and the permission guard share this cache.
  */

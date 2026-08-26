@@ -13,6 +13,8 @@ import type { ApiErrorResponse, LoginResponse } from '@/features/auth/auth.types
 
 export interface AuthHandlers {
   getTokens: () => { accessToken: string | null; refreshToken: string | null }
+  /** Tenant slug of the active session; sent as X-Tenant-Id on every request. */
+  getTenantSlug: () => string | null
   onSessionUpdated: (tokens: { accessToken: string; refreshToken: string }) => void
   onSessionCleared: () => void
 }
@@ -42,7 +44,6 @@ export class ApiClientError extends Error {
 }
 
 // Single-flight: only one refresh request in flight at a time; concurrent 401s
-// coalesce onto it (auth-flow.md §3).
 let refreshing: Promise<string | null> | null = null
 
 async function refreshOnce(): Promise<string | null> {
@@ -60,7 +61,10 @@ async function doRefresh(): Promise<string | null> {
   try {
     const res = await fetch(`${baseUrl}/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(handlers.getTenantSlug() ? { 'X-Tenant-Id': handlers.getTenantSlug()! } : {})
+      },
       body: JSON.stringify({ accessToken, refreshToken })
     })
     if (!res.ok) {
@@ -83,6 +87,10 @@ export async function apiFetch<T>(path: string, init: RequestInit & { auth?: boo
   const token = handlers?.getTokens().accessToken
   const headers = new Headers(rest.headers)
   if (rest.body) headers.set('Content-Type', 'application/json')
+  // Multi-tenancy: the workspace slug rides along on every request. After login the
+  // JWT's tid claim is authoritative, but the header is what carries it pre-auth.
+  const tenantSlug = handlers?.getTenantSlug()
+  if (tenantSlug) headers.set('X-Tenant-Id', tenantSlug)
   if (auth && token) headers.set('Authorization', `Bearer ${token}`)
 
   const doRequest = (): Promise<Response> =>

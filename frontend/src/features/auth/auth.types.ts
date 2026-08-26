@@ -8,9 +8,13 @@ export interface UserDto {
   status: 'active' | 'locked' | 'disabled'
   createdAt: string
   updatedAt: string
+  /** The workspace this user belongs to (multi-tenancy). */
+  tenantId: string
 }
 
 export interface LoginRequest {
+  /** Tenant slug identifying the workspace to sign into. */
+  tenantSlug: string
   email: string
   password: string
 }
@@ -48,4 +52,6 @@ export const ERROR_CODE = {
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   REFRESH_TOKEN_REVOKED: 'REFRESH_TOKEN_REVOKED',
   ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  TENANT_NOT_FOUND: 'TENANT_NOT_FOUND',
+  TENANT_SUSPENDED: 'TENANT_SUSPENDED',
 }

@@ -7,6 +7,7 @@ import { UsersPage } from '@/features/users/pages/UsersPage'
 import { ProfilePage } from '@/features/users/pages/ProfilePage'
 import { RolesPage } from '@/features/roles/RolesPage'
 import { RequirePermission } from '@/features/roles/PermissionRoute'
+import { TenantsPage } from '@/features/tenants/pages/TenantsPage'
 import { ToastHost } from '@/shared/ui/ToastHost'
 
 export default function App(): React.JSX.Element {
@@ -23,6 +24,9 @@ export default function App(): React.JSX.Element {
         </Route>
         <Route element={<RequirePermission permission="roles.read" />}>
           <Route path="/roles" element={<RolesPage />} />
+        </Route>
+        <Route element={<RequirePermission permission="tenants.read" />}>
+          <Route path="/tenants" element={<TenantsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

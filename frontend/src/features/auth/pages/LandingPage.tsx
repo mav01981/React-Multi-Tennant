@@ -25,6 +25,8 @@ export function LandingPage(): React.JSX.Element {
   const toggleTheme = useUiStore((s) => s.toggleTheme)
   const canReadUsers = useHasPermission('users.read')
   const canReadRoles = useHasPermission('roles.read')
+  // feat-05 TEN-07: tenant administration UI is platform-admin only.
+  const canReadTenants = useHasPermission('tenants.read')
 
   async function handleLogout(): Promise<void> {
     await logout() // always clears local session (feat-01 §3.4)
@@ -76,6 +78,11 @@ export function LandingPage(): React.JSX.Element {
             <Button variant="contained" color="primary" onClick={handleLogout}>
               Log out
             </Button>
+            {canReadTenants && (
+              <Button variant="outlined" onClick={() => navigate('/tenants')}>
+                Tenants
+              </Button>
+            )}
           </Box>
         </Box>
 

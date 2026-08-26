@@ -5,14 +5,16 @@ import { setAuthHandlers } from '@/shared/api/client'
 
 const STORAGE_KEYS = {
   access: 'accessToken',
-  refresh: 'refreshToken'
+  refresh: 'refreshToken',
+  tenantSlug: 'tenantSlug'
 } as const
 
-function readStoredTokens(): { accessToken: string | null; refreshToken: string | null } {
-  if (typeof window === 'undefined') return { accessToken: null, refreshToken: null }
+function readStoredSession(): { accessToken: string | null; refreshToken: string | null; tenantSlug: string | null } {
+  if (typeof window === 'undefined') return { accessToken: null, refreshToken: null, tenantSlug: null }
   return {
     accessToken: window.localStorage.getItem(STORAGE_KEYS.access),
-    refreshToken: window.localStorage.getItem(STORAGE_KEYS.refresh)
+    refreshToken: window.localStorage.getItem(STORAGE_KEYS.refresh),
+    tenantSlug: window.localStorage.getItem(STORAGE_KEYS.tenantSlug)
   }
 }
 
@@ -20,6 +22,8 @@ interface AuthState {
   user: UserDto | null
   accessToken: string | null
   refreshToken: string | null
+  /** Slug of the workspace the session belongs to (multi-tenancy). */
+  tenantSlug: string | null
   isLoading: boolean
   error: string | null
 
@@ -29,17 +33,19 @@ interface AuthState {
   refreshAccessToken: () => Promise<string | null>
 }
 
-const initial = readStoredTokens()
+const initial = readStoredSession()
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   accessToken: initial.accessToken,
   refreshToken: initial.refreshToken,
+  tenantSlug: initial.tenantSlug,
   isLoading: false,
   error: null,
 
   login: async (credentials) => {
-    set({ isLoading: true, error: null })
+    set({ isLoading: true, error: null, tenantSlug: credentials.tenantSlug })
+    window.localStorage.setItem(STORAGE_KEYS.tenantSlug, credentials.tenantSlug)
     try {
       const response: LoginResponse = await authApi.login(credentials)
       setSession(set, response)
@@ -122,6 +128,7 @@ function extractError(err: unknown): string {
  */
 setAuthHandlers({
   getTokens: () => ({ accessToken: useAuthStore.getState().accessToken, refreshToken: useAuthStore.getState().refreshToken }),
+  getTenantSlug: () => useAuthStore.getState().tenantSlug,
   onSessionUpdated: (tokens) => useAuthStore.setState({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }),
   onSessionCleared: () => clearSession(useAuthStore.setState.bind(useAuthStore))
 })

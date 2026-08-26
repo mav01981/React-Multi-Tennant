@@ -16,6 +16,7 @@ export function LoginPage(): React.JSX.Element {
   const isLoading = useAuthStore((s) => s.isLoading)
   const login = useAuthStore((s) => s.login)
 
+  const [tenantSlug, setTenantSlug] = useState('acme')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -27,12 +28,14 @@ export function LoginPage(): React.JSX.Element {
     e.preventDefault()
     setError(null)
     try {
-      await login({ email, password })
+      await login({ tenantSlug: tenantSlug.trim().toLowerCase(), email, password })
       navigate('/', { replace: true })
     } catch (err) {
       const code = (err as { code?: string }).code
       if (code === ERROR_CODE.ACCOUNT_LOCKED) setError('Account is locked. Contact support.')
       else if (code === ERROR_CODE.INVALID_CREDENTIALS) setError('Email or password is incorrect.')
+      else if (code === ERROR_CODE.TENANT_NOT_FOUND) setError('Unknown workspace. Check the tenant name.')
+      else if (code === ERROR_CODE.TENANT_SUSPENDED) setError('This workspace is suspended. Contact support.')
       else setError((err as Error).message || 'Login failed. Please try again.')
     }
   }
@@ -44,6 +47,14 @@ export function LoginPage(): React.JSX.Element {
           Sign in
         </Typography>
         <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid', gap: 2, mt: 2 }}>
+          <TextField
+            label="Workspace"
+            value={tenantSlug}
+            onChange={(e) => setTenantSlug(e.target.value)}
+            required
+            fullWidth
+            helperText="Your organization's tenant slug"
+          />
           <TextField
             label="Email"
             type="email"

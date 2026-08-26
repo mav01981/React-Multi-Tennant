@@ -2,7 +2,7 @@ import Snackbar from '@mui/material/Snackbar'
 import Alert, { type AlertColor } from '@mui/material/Alert'
 import { useUiStore } from './ui.store'
 
-// Map the ui store's toast type to an MUI Alert severity (plan.md §6).
+// Map the ui store's toast type to an MUI Alert severity.
 const SEVERITY: Record<string, AlertColor> = {
   success: 'success',
   error: 'error',
@@ -11,7 +11,7 @@ const SEVERITY: Record<string, AlertColor> = {
 }
 
 /**
- * Global toasts host (plan.md §6 Store Integration): subscribes to the `ui`
+ * Global toasts host (Store Integration): subscribes to the `ui`
  * store's toasts and renders each as an MUI Snackbar + Alert. One Alert per
  * toast so severity styling and dismiss apply per notification.
  */

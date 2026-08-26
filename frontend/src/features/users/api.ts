@@ -38,8 +38,8 @@ export const usersApi = {
     return apiFetch<UserDto>(`/users/${id}`, { method: 'GET' })
   },
 
-  async getMe(): Promise<UserDto> {
-    return apiFetch<UserDto>('/users/me', { method: 'GET' })
+  async getMe(signal?: AbortSignal): Promise<UserDto> {
+    return apiFetch<UserDto>('/users/me', { method: 'GET', signal })
   },
 
   async updateMe(data: UpdateProfileRequest): Promise<UserDto> {

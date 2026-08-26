@@ -27,6 +27,8 @@ import { useUsersStore, selectTotalPages, selectHasNextPage, selectHasPrevPage }
 import type { CreateUserRequest, UpdateUserRequest } from '../users.types'
 import { useUiStore } from '@/shared/ui/ui.store'
 import { useRolesStore, useHasPermission } from '@/features/roles/roles.store'
+import { useEntityEditorState } from '@/shared/hooks/useEntityEditor'
+import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue'
 
 type UserForm = CreateUserRequest & { status: 'active' | 'locked' | 'disabled' }
 
@@ -49,15 +51,12 @@ export function UsersPage(): React.JSX.Element {
   const addToast = useUiStore((s) => s.addToast)
 
   const [searchInput, setSearchInput] = useState(filters.search)
+  const debouncedSearch = useDebouncedValue(searchInput, 300)
   const roleDtos = useRolesStore((s) => s.roles)
   const fetchRoles = useRolesStore((s) => s.fetchRoles)
   const roles = roleDtos.map((role) => role.name)
   const canDelete = useHasPermission('users.delete')
-  const [showCreate, setShowCreate] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<UserForm>(EMPTY_FORM)
-  const [deleteTarget, setDeleteTarget] = useState<typeof items[number] | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const { state: { showCreate, editingId, form, deleteTarget, deleteError }, openCreate, startEdit, resetForm, updateForm, openDelete, closeDelete, setDeleteError } = useEntityEditorState<typeof items[number], UserForm>(EMPTY_FORM)
   const totalPages = useUsersStore(selectTotalPages)
   const hasNextPage = useUsersStore(selectHasNextPage)
   const hasPrevPage = useUsersStore(selectHasPrevPage)
@@ -68,16 +67,11 @@ export function UsersPage(): React.JSX.Element {
   }, [fetchUsers, fetchRoles])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (searchInput !== filters.search) setSearch(searchInput)
-    }, 300)
-    return () => window.clearTimeout(timer)
-  }, [searchInput, filters.search, setSearch])
+    if (debouncedSearch !== filters.search) setSearch(debouncedSearch)
+  }, [debouncedSearch, filters.search, setSearch])
 
-  const resetForm = () => {
-    setForm(EMPTY_FORM)
-    setEditingId(null)
-    setShowCreate(false)
+  const startEditUser = (user: typeof items[number]) => {
+    startEdit(user.id, { email: user.email, firstName: user.firstName, lastName: user.lastName, password: '', roles: user.roles, status: user.status })
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -97,19 +91,13 @@ export function UsersPage(): React.JSX.Element {
     }
   }
 
-  const startEdit = (user: typeof items[number]) => {
-    setEditingId(user.id)
-    setShowCreate(false)
-    setForm({ email: user.email, firstName: user.firstName, lastName: user.lastName, password: '', roles: user.roles, status: user.status })
-  }
-
   const confirmDelete = async () => {
     if (!deleteTarget) return
     setDeleteError(null)
     try {
       await deleteUser(deleteTarget.id)
       addToast('User deleted', 'success')
-      setDeleteTarget(null)
+      closeDelete()
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete user')
     }
@@ -135,7 +123,7 @@ export function UsersPage(): React.JSX.Element {
           <Button variant="outlined" color="inherit" onClick={() => { setSearchInput(''); setSearch('') }}>
             Clear
           </Button>
-          <Button variant="contained" color="success" onClick={() => { resetForm(); setShowCreate(true) }}>
+          <Button variant="contained" color="success" onClick={openCreate}>
             New user
           </Button>
         </Box>
@@ -159,16 +147,16 @@ export function UsersPage(): React.JSX.Element {
             {editingId ? 'Edit user' : 'Create user'}
           </Typography>
           <Box component="form" onSubmit={handleSubmit} sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-            <TextField required type="email" label="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <TextField required label="First name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
-            <TextField required label="Last name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
-            {!editingId && <TextField required type="password" label="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />}
-            <TextField select label="Role" value={form.roles[0] ?? ''} onChange={(e) => setForm({ ...form, roles: e.target.value ? [e.target.value] : [] })}>
+            <TextField required type="email" label="Email" value={form.email} onChange={(e) => updateForm({ email: e.target.value })} />
+            <TextField required label="First name" value={form.firstName} onChange={(e) => updateForm({ firstName: e.target.value })} />
+            <TextField required label="Last name" value={form.lastName} onChange={(e) => updateForm({ lastName: e.target.value })} />
+            {!editingId && <TextField required type="password" label="Password" value={form.password} onChange={(e) => updateForm({ password: e.target.value })} />}
+            <TextField select label="Role" value={form.roles[0] ?? ''} onChange={(e) => updateForm({ roles: e.target.value ? [e.target.value] : [] })}>
               <MenuItem value="">No role</MenuItem>
               {roles.map((role) => <MenuItem key={role} value={role}>{role}</MenuItem>)}
             </TextField>
             {editingId && (
-              <TextField select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as UserForm['status'] })}>
+              <TextField select label="Status" value={form.status} onChange={(e) => updateForm({ status: e.target.value as UserForm['status'] })}>
                 <MenuItem value="active">Active</MenuItem>
                 <MenuItem value="locked">Locked</MenuItem>
                 <MenuItem value="disabled">Disabled</MenuItem>
@@ -218,11 +206,11 @@ export function UsersPage(): React.JSX.Element {
                       />
                     </TableCell>
                     <TableCell align="center">
-                      <IconButton size="small" onClick={() => startEdit(user)} aria-label={`Edit ${user.email}`}>
+                      <IconButton size="small" onClick={() => startEditUser(user)} aria-label={`Edit ${user.email}`}>
                         <EditIcon fontSize="small" />
                       </IconButton>
                       {canDelete && (
-                        <IconButton size="small" color="error" onClick={() => { setDeleteError(null); setDeleteTarget(user) }} aria-label={`Delete ${user.email}`}>
+                        <IconButton size="small" color="error" onClick={() => openDelete(user)} aria-label={`Delete ${user.email}`}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       )}
@@ -249,8 +237,8 @@ export function UsersPage(): React.JSX.Element {
         </Paper>
       )}
 
-      {/* Delete confirmation (simple modal → local state per plan.md §5/§6) */}
-      <Dialog open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
+      {/* Delete confirmation (simple modal → local state */}
+      <Dialog open={deleteTarget !== null} onClose={closeDelete} maxWidth="xs" fullWidth>
         <DialogTitle>Delete user</DialogTitle>
         <DialogContent>
           <Typography>
@@ -259,7 +247,7 @@ export function UsersPage(): React.JSX.Element {
           {deleteError && <Alert severity="error" sx={{ mt: 2 }}>{deleteError}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)} color="inherit">Cancel</Button>
+          <Button onClick={closeDelete} color="inherit">Cancel</Button>
           <Button onClick={confirmDelete} color="error" variant="contained">Delete</Button>
         </DialogActions>
       </Dialog>
