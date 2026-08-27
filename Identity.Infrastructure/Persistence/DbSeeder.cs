@@ -36,6 +36,11 @@ public static class DbSeeder
             await db.SaveChangesAsync();
         }
 
+        // The platform workspace carries the same per-tenant role catalog as any other
+        // tenant (Admin/Manager/ReadOnly), so GET /roles there reflects all assignable
+        // roles and normal (non-super-admin) users can be administered within it.
+        await TenantRoles.SeedDefaultRolesAsync(db, platform.Id);
+
         var seed = config.GetSection("Seed");
         var email = seed["BootstrapAdminEmail"] ?? "admin@example.com";
         var password = seed["BootstrapAdminPassword"] ?? "ChangeMe-Admin-1!";

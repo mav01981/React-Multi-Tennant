@@ -31,7 +31,7 @@ $r = Send-Api '/me' 'GET' $null @{ Authorization = 'Bearer invalid.token.here' }
 Write-Output ("    -> $($r.Status) $($r.Body)")
 
 Write-Output '[4] POST /auth/login (bad password, 401 expected)'
-$r = Send-Api '/login' 'POST' '{"email":"admin@example.com","password":"wrongpass-1!"}'
+$r = Send-Api '/login' 'POST' '{"email":"admin@example.com","password":"wrongpass-1!"}' @{ 'X-Tenant-Id' = 'platform' }
 Write-Output ("    -> $($r.Status) $($r.Body)")
 
 Write-Output '[5] POST /auth/refresh (rotate -> new pair)'

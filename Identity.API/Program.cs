@@ -81,7 +81,13 @@ builder.Services
             ClockSkew = TimeSpan.FromSeconds(config.GetValue("Jwt:ClockSkewSeconds", 30))
         };
 
-        // Surface a JSON error envelope on auth failures.
+        // Surface a JSON error envelope on auth failures. All 401s flow through
+        // OnChallenge: the JWT bearer handler triggers it both when no credentials are
+        // present AND when a presented token fails validation (the failed-token path
+        // surfaces via AuthenticateFailure). We must NOT also write a response in
+        // OnAuthenticationFailed — doing so double-writes to the response (a 401 + body
+        // already on the wire), which resets the connection / yields a 500 instead of a
+        // clean JSON 401.
         options.Events = new JwtBearerEvents
         {
             OnChallenge = async context =>
@@ -89,13 +95,8 @@ builder.Services
                 context.HandleResponse();
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(new ApiErrorResponse(
-                    new ApiError(ErrorCodes.Unauthenticated, context.ErrorDescription ?? "Authentication required.")));
-            },
-            OnAuthenticationFailed = async context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await context.Response.WriteAsJsonAsync(new ApiErrorResponse(
-                    new ApiError(ErrorCodes.Unauthenticated, "Invalid token.")));
+                    new ApiError(ErrorCodes.Unauthenticated,
+                        context.AuthenticateFailure is not null ? "Invalid token." : "Authentication required.")));
             }
         };
     });

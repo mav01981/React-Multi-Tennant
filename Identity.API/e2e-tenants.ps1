@@ -96,7 +96,7 @@ $r = Send-Api '/auth/login' 'POST' (@{ email = 'a@b.co'; password = $password } 
 if ($r.Status -ne 422) { throw "Expected 422 TENANT_SUSPENDED, got $($r.Status) $(ErrCode $r)." }
 
 # Platform tenant itself cannot be suspended
-$platformTenant = ((Send-Api '/tenants' 'GET' $null $platHeaders).Body | ConvertFrom-Json) | Where-Object { $_.slug -eq 'platform' }
+$platformTenant = ((Send-Api '/tenants' 'GET' $null $platHeaders).Body | ConvertFrom-Json).items | Where-Object { $_.slug -eq 'platform' }
 $r = Send-Api "/tenants/$($platformTenant.id)" 'PUT' (@{ status = 'suspended' } | ConvertTo-Json) $platHeaders
 if ($r.Status -ne 400) { throw "Suspending platform tenant must 400, got $($r.Status)." }
 

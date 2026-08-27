@@ -27,7 +27,7 @@ Write-Output '[1] GET /roles (admin, roles.read satisfied)'
 $roles = Invoke-RestMethod -Uri "$base/roles" -Headers $adminHeaders
 $admin    = $roles | Where-Object { $_.name -eq 'Admin' }
 $manager  = $roles | Where-Object { $_.name -eq 'Manager' }
-$userRole = $roles | Where-Object { $_.name -eq 'User' }
+$userRole = $roles | Where-Object { $_.name -eq 'ReadOnly' }
 if (-not $admin.permissions.Contains('users.delete') -or -not $admin.permissions.Contains('roles.read')) { throw 'Admin role missing expected permissions.' }
 if ($manager.permissions.Contains('users.delete')) { throw 'Manager must NOT have users.delete.' }
 if (-not $userRole.permissions.Contains('profile.read')) { throw 'User role missing profile.read.' }
@@ -42,7 +42,7 @@ Write-Output '[2] POST /users (create Manager + User)'
 $mgr = Invoke-RestMethod -Uri "$base/users" -Method Post -Headers $adminHeaders -ContentType 'application/json' `
     -Body (@{ email = $managerEmail; firstName = 'Role'; lastName = 'Manager'; password = $managerPass; roles = @('Manager') } | ConvertTo-Json)
 $usr = Invoke-RestMethod -Uri "$base/users" -Method Post -Headers $adminHeaders -ContentType 'application/json' `
-    -Body (@{ email = $userEmail; firstName = 'Role'; lastName = 'User'; password = $managerPass; roles = @('User') } | ConvertTo-Json)
+    -Body (@{ email = $userEmail; firstName = 'Role'; lastName = 'User'; password = $managerPass; roles = @('ReadOnly') } | ConvertTo-Json)
 Write-Output "    -> 201 Manager=$($mgr.id), User=$($usr.id)"
 
 Write-Output '[3] Manager: GET /users (users.read satisfied -> allowed)'

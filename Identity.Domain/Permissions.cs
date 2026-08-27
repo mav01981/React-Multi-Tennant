@@ -42,7 +42,7 @@ public static class Permissions
         {
             ["Admin"] = [UsersRead, UsersWrite, UsersDelete, RolesRead, ProfileRead, ProfileWrite],
             ["Manager"] = [UsersRead, UsersWrite, ProfileRead, ProfileWrite],
-            ["ReadOnly"] = [UsersRead, RolesRead, ProfileRead, ProfileWrite],
+            ["ReadOnly"] = [ProfileRead, ProfileWrite],
             [PlatformAdminRole] = [TenantsRead, TenantsWrite, UsersRead, UsersWrite, UsersDelete, RolesRead, ProfileRead, ProfileWrite]
         };
 
