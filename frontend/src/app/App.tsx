@@ -1,4 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuthStore } from '@/features/auth/auth.store'
+import { AuthSplash } from './AuthSplash'
 import { ProtectedRoute } from '@/features/auth/guards/ProtectedRoute'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
 import { LandingPage } from '@/features/auth/pages/LandingPage'
@@ -11,25 +13,32 @@ import { TenantsPage } from '@/features/tenants/pages/TenantsPage'
 import { ToastHost } from '@/shared/ui/ToastHost'
 
 export default function App(): React.JSX.Element {
+  // Render-first bootstrap: keep the routed tree (and its auth guards) hidden
+  // behind a splash until the silent re-auth + role warm-up has settled. This
+  // prevents flashing the login page or a user-less landing during hydration,
+  // while main.tsx mounts the root immediately (never blocking on network I/O).
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+  if (!isInitialized) return <AuthSplash />
+
   return (
     <>
       <ToastHost />
       <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route element={<ProtectedRoute />}>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route element={<AdminOnly />}>
-          <Route path="/users" element={<UsersPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route element={<AdminOnly />}>
+            <Route path="/users" element={<UsersPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="roles.read" />}>
+            <Route path="/roles" element={<RolesPage />} />
+          </Route>
+          <Route element={<RequirePermission permission="tenants.read" />}>
+            <Route path="/tenants" element={<TenantsPage />} />
+          </Route>
         </Route>
-        <Route element={<RequirePermission permission="roles.read" />}>
-          <Route path="/roles" element={<RolesPage />} />
-        </Route>
-        <Route element={<RequirePermission permission="tenants.read" />}>
-          <Route path="/tenants" element={<TenantsPage />} />
-        </Route>
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   )

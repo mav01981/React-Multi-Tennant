@@ -24,14 +24,17 @@ export function ProfilePage(): React.JSX.Element {
     // names is left to the single `[user]`-driven effect below, so there is
     // exactly one source of truth for that local state.
     const controller = new AbortController()
-    usersApi.getMe(controller.signal).then((current) => {
-      useAuthStore.setState({ user: current })
-    }).catch((err: unknown) => {
-      // Ignore errors caused by unmounting (abort) — the component is gone.
-      if (!controller.signal.aborted) {
-        setError(err instanceof Error ? err.message : 'Failed to load profile')
-      }
-    })
+    usersApi
+      .getMe(controller.signal)
+      .then((current) => {
+        useAuthStore.getState().setUser(current)
+      })
+      .catch((err: unknown) => {
+        // Ignore errors caused by unmounting (abort) — the component is gone.
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : 'Failed to load profile')
+        }
+      })
     return () => controller.abort()
   }, [])
 
@@ -44,7 +47,7 @@ export function ProfilePage(): React.JSX.Element {
     setError(null)
     try {
       const updated = await usersApi.updateMe(names)
-      useAuthStore.setState({ user: updated })
+      useAuthStore.getState().setUser(updated)
       addToast('Profile updated', 'success')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update profile')
@@ -72,7 +75,11 @@ export function ProfilePage(): React.JSX.Element {
       <Typography variant="h4" component="h1" gutterBottom>
         My profile
       </Typography>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" component="h2" gutterBottom>

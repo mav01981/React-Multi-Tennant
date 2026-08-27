@@ -23,7 +23,7 @@ Any authenticated user can read and update their own identity (`firstName`, `las
 1. **Profile read:** `useAuthStore(s => s.user)` is the primary source; `GET /users/me` used to revalidate on the profile view.
 2. **Profile update:**
    - `PUT /users/me` with `UpdateProfileRequest`.
-   - On success, sync `useAuthStore.setState({ user: updated })` so the navbar (`selectFullName`, `selectInitials`, avatar) updates immediately.
+   - On success, sync via the auth store's `setUser(updated)` action so the navbar (`selectFullName`, `selectInitials`, avatar) updates immediately — updating identity through the action keeps derived state/side effects inside the store.
 3. **Password change:**
    - `currentPassword` required; validate `newPassword` against policy (length, complexity).
    - On success — 204 — and **keep the session** (only a new password hash on the backend, tokens untouched).

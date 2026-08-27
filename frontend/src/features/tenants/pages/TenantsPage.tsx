@@ -12,14 +12,7 @@ import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow
-} from '@mui/material'
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { useTenantsStore, selectTotalPages, selectHasNextPage, selectHasPrevPage } from '../tenants.store'
@@ -51,7 +44,17 @@ export function TenantsPage(): React.JSX.Element {
 
   const [searchInput, setSearchInput] = useState(filters.search)
   const debouncedSearch = useDebouncedValue(searchInput, 300)
-  const { state: { showCreate, editingId, form, formError, deleteTarget, deleteError }, openCreate, startEdit, resetForm, updateForm, setFormError, openDelete, closeDelete, setDeleteError } = useEntityEditorState<TenantDto, typeof EMPTY_FORM>(EMPTY_FORM)
+  const {
+    state: { showCreate, editingId, form, formError, deleteTarget, deleteError },
+    openCreate,
+    startEdit,
+    resetForm,
+    updateForm,
+    setFormError,
+    openDelete,
+    closeDelete,
+    setDeleteError
+  } = useEntityEditorState<TenantDto, typeof EMPTY_FORM>(EMPTY_FORM)
   const totalPages = useTenantsStore(selectTotalPages)
   const hasNextPage = useTenantsStore(selectHasNextPage)
   const hasPrevPage = useTenantsStore(selectHasPrevPage)
@@ -70,7 +73,8 @@ export function TenantsPage(): React.JSX.Element {
     startEdit(tenant.id, { name: tenant.name, displayName: tenant.displayName, slug: tenant.slug })
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
     setFormError(null)
     try {
       if (editingId) {
@@ -93,7 +97,6 @@ export function TenantsPage(): React.JSX.Element {
       }
     }
   }
-
 
   const toggleStatus = async (tenant: TenantDto) => {
     const next = tenant.status === 'active' ? 'suspended' : 'active'
@@ -119,7 +122,9 @@ export function TenantsPage(): React.JSX.Element {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>Tenants</Typography>
+      <Typography variant="h4" gutterBottom>
+        Tenants
+      </Typography>
       <Typography variant="body2" color="text.secondary" gutterBottom>
         Platform-wide workspace administration (superadmin only).
       </Typography>
@@ -137,7 +142,11 @@ export function TenantsPage(): React.JSX.Element {
         </Button>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => useTenantsStore.getState().clearError()}>{error}</Alert>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => useTenantsStore.getState().clearError()}>
+          {error}
+        </Alert>
+      )}
 
       {isLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -173,7 +182,11 @@ export function TenantsPage(): React.JSX.Element {
                       />
                     </TableCell>
                     <TableCell align="center">
-                      <IconButton size="small" onClick={() => startEditTenant(tenant)} aria-label={`Edit ${tenant.slug}`}>
+                      <IconButton
+                        size="small"
+                        onClick={() => startEditTenant(tenant)}
+                        aria-label={`Edit ${tenant.slug}`}
+                      >
                         <EditIcon fontSize="small" />
                       </IconButton>
                       <Chip
@@ -217,37 +230,36 @@ export function TenantsPage(): React.JSX.Element {
         </Paper>
       )}
 
-      {/* Create / edit dialog */}
+      {/* Create / edit dialog. Real <form> so Enter in any field submits (feat-05). */}
       <Dialog open={showCreate} onClose={resetForm} maxWidth="xs" fullWidth>
-        <DialogTitle>{editingId ? 'Edit tenant' : 'New tenant'}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-          {formError && <Alert severity="error">{formError}</Alert>}
-          <TextField
-            label="Name"
-            value={form.name}
-            onChange={(e) => updateForm({ name: e.target.value })}
-            required
-          />
-          <TextField
-            label="Display name"
-            value={form.displayName}
-            onChange={(e) => updateForm({ displayName: e.target.value })}
-          />
-          <TextField
-            label="Slug"
-            value={form.slug}
-            onChange={(e) => updateForm({ slug: e.target.value })}
-            required
-            disabled={editingId !== null}
-            helperText={editingId ? 'Slug is immutable after creation.' : 'Lowercase letters, digits and hyphens.'}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={resetForm} color="inherit">Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained" disabled={!form.name.trim() || (!editingId && !form.slug.trim())}>
-            {editingId ? 'Save' : 'Create'}
-          </Button>
-        </DialogActions>
+        <Box component="form" onSubmit={handleSubmit}>
+          <DialogTitle>{editingId ? 'Edit tenant' : 'New tenant'}</DialogTitle>
+          <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+            {formError && <Alert severity="error">{formError}</Alert>}
+            <TextField label="Name" value={form.name} onChange={(e) => updateForm({ name: e.target.value })} required />
+            <TextField
+              label="Display name"
+              value={form.displayName}
+              onChange={(e) => updateForm({ displayName: e.target.value })}
+            />
+            <TextField
+              label="Slug"
+              value={form.slug}
+              onChange={(e) => updateForm({ slug: e.target.value })}
+              required
+              disabled={editingId !== null}
+              helperText={editingId ? 'Slug is immutable after creation.' : 'Lowercase letters, digits and hyphens.'}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button type="button" onClick={resetForm} color="inherit">
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained" disabled={!form.name.trim() || (!editingId && !form.slug.trim())}>
+              {editingId ? 'Save' : 'Create'}
+            </Button>
+          </DialogActions>
+        </Box>
       </Dialog>
 
       {/* Delete confirmation (feat-05 TEN-06: modal before delete) */}
@@ -255,16 +267,24 @@ export function TenantsPage(): React.JSX.Element {
         <DialogTitle>Delete tenant</DialogTitle>
         <DialogContent>
           <Typography>
-            Delete tenant <strong>{deleteTarget?.displayName}</strong> (<code>{deleteTarget?.slug}</code>)? Its users will no longer be able to sign in. This cannot be undone.
+            Delete tenant <strong>{deleteTarget?.displayName}</strong> (<code>{deleteTarget?.slug}</code>)? Its users
+            will no longer be able to sign in. This cannot be undone.
           </Typography>
-          {deleteError && <Alert severity="error" sx={{ mt: 2 }}>{deleteError}</Alert>}
+          {deleteError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {deleteError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeDelete} color="inherit">Cancel</Button>
-          <Button onClick={confirmDelete} color="error" variant="contained">Delete</Button>
+          <Button onClick={closeDelete} color="inherit">
+            Cancel
+          </Button>
+          <Button onClick={confirmDelete} color="error" variant="contained">
+            Delete
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
   )
 }
-

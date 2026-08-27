@@ -65,7 +65,9 @@ beforeEach(() => {
 describe('users store – fetchUsers', () => {
   it('loads the page into state using the current filters', async () => {
     usersApiMock.getAll.mockResolvedValue({ items: users, totalCount: 2, page: 1, pageSize: 10, totalPages: 1 })
-    useUsersStore.setState({ filters: { ...useUsersStore.getState().filters, search: 'ann', status: 'active', page: 1 } })
+    useUsersStore.setState({
+      filters: { ...useUsersStore.getState().filters, search: 'ann', status: 'active', page: 1 }
+    })
 
     await useUsersStore.getState().fetchUsers()
 
@@ -74,9 +76,10 @@ describe('users store – fetchUsers', () => {
     expect(state.totalCount).toBe(2)
     expect(state.isLoading).toBe(false)
     expect(state.error).toBeNull()
-    // The store forwards the active filters to the API.
+    // The store forwards the active filters to the API (with its abort signal).
     expect(usersApiMock.getAll).toHaveBeenCalledWith(
-      expect.objectContaining({ search: 'ann', status: 'active', page: 1, pageSize: 10 })
+      expect.objectContaining({ search: 'ann', status: 'active', page: 1, pageSize: 10 }),
+      expect.any(AbortSignal)
     )
   })
 
@@ -90,6 +93,57 @@ describe('users store – fetchUsers', () => {
     expect(state.isLoading).toBe(false)
     expect(state.items).toEqual([])
   })
+
+  it('aborts the superseded request before starting a new one (race guard)', async () => {
+    const signals: AbortSignal[] = []
+    let releaseFirst!: () => void
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    usersApiMock.getAll
+      .mockImplementationOnce((_p: unknown, signal?: AbortSignal) => {
+        signals.push(signal!)
+        return firstGate
+      })
+      .mockImplementationOnce((_p: unknown, signal?: AbortSignal) => {
+        signals.push(signal!)
+        return Promise.resolve({ items: users, totalCount: 2, page: 1, pageSize: 10, totalPages: 1 })
+      })
+
+    // Start a slow request, then immediately supersede it with a fresh one.
+    const first = useUsersStore.getState().fetchUsers()
+    const second = useUsersStore.getState().fetchUsers()
+    releaseFirst()
+    await Promise.all([first, second])
+
+    expect(signals).toHaveLength(2)
+    // The first (stale) request's controller was cancelled; the latest stays live.
+    expect(signals[0].aborted).toBe(true)
+    expect(signals[1].aborted).toBe(false)
+  })
+
+  it('ignores a stale response that resolves after abort (does not overwrite state)', async () => {
+    let resolveStale!: (v: unknown) => void
+    const stale = new Promise((resolve) => {
+      resolveStale = resolve
+    })
+    usersApiMock.getAll
+      .mockReturnValueOnce(stale) // first request: slow, will be superseded
+      .mockResolvedValueOnce({ items: [users[1]], totalCount: 1, page: 1, pageSize: 10, totalPages: 1 })
+
+    const first = useUsersStore.getState().fetchUsers()
+    await useUsersStore.getState().fetchUsers() // second request supersedes the first
+
+    // Resolve the stale request AFTER the fresh one committed its data.
+    resolveStale({ items: users, totalCount: 2, page: 1, pageSize: 10, totalPages: 1 })
+    await first
+
+    const state = useUsersStore.getState()
+    // The fresh result won; the stale response did not clobber it.
+    expect(state.items).toEqual([users[1]])
+    expect(state.totalCount).toBe(1)
+    expect(state.isLoading).toBe(false)
+  })
 })
 
 describe('users store – create / update / delete', () => {
@@ -98,7 +152,13 @@ describe('users store – create / update / delete', () => {
     const created = { ...users[1], id: 'u3' }
     usersApiMock.create.mockResolvedValue(created)
 
-    await useUsersStore.getState().createUser({ email: created.email, firstName: created.firstName, lastName: created.lastName, password: 'pw', roles: [] })
+    await useUsersStore.getState().createUser({
+      email: created.email,
+      firstName: created.firstName,
+      lastName: created.lastName,
+      password: 'pw',
+      roles: []
+    })
 
     const state = useUsersStore.getState()
     expect(state.items[0]).toEqual(created)
@@ -107,7 +167,9 @@ describe('users store – create / update / delete', () => {
 
   it('re-throws and records errors when creation fails', async () => {
     usersApiMock.create.mockRejectedValue(new Error('create failed'))
-    await expect(useUsersStore.getState().createUser({ email: 'a', firstName: 'a', lastName: 'b', password: 'x', roles: [] })).rejects.toThrow('create failed')
+    await expect(
+      useUsersStore.getState().createUser({ email: 'a', firstName: 'a', lastName: 'b', password: 'x', roles: [] })
+    ).rejects.toThrow('create failed')
     expect(useUsersStore.getState().error).toBe('create failed')
   })
 

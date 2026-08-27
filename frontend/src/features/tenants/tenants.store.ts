@@ -2,6 +2,11 @@ import { create } from 'zustand'
 import type { TenantFilters, CreateTenantRequest, UpdateTenantRequest } from './tenants.types'
 import { tenantsApi } from './api'
 
+// Guards against filter-storm races on the list page: a stale (superceded)
+// response must never overwrite a newer one, so only the latest in-flight
+// request is allowed to commit its result into state.
+let fetchAbortController: AbortController | null = null
+
 interface TenantsState {
   // ── State ──────────────────────────────
   items: import('./tenants.types').TenantDto[]
@@ -23,17 +28,13 @@ interface TenantsState {
 }
 
 // ── Selectors ──────────────────────────────────────────
-export const selectSelectedTenant = (s: TenantsState) =>
-  s.items.find(t => t.id === s.selectedTenantId) ?? null
+export const selectSelectedTenant = (s: TenantsState) => s.items.find((t) => t.id === s.selectedTenantId) ?? null
 
-export const selectTotalPages = (s: TenantsState) =>
-  Math.ceil(s.totalCount / s.filters.pageSize)
+export const selectTotalPages = (s: TenantsState) => Math.ceil(s.totalCount / s.filters.pageSize)
 
-export const selectHasNextPage = (s: TenantsState) =>
-  s.filters.page < selectTotalPages(s)
+export const selectHasNextPage = (s: TenantsState) => s.filters.page < selectTotalPages(s)
 
-export const selectHasPrevPage = (s: TenantsState) =>
-  s.filters.page > 1
+export const selectHasPrevPage = (s: TenantsState) => s.filters.page > 1
 
 export const useTenantsStore = create<TenantsState>((set, get) => ({
   items: [],
@@ -48,20 +49,36 @@ export const useTenantsStore = create<TenantsState>((set, get) => ({
   error: null,
 
   fetchTenants: async () => {
+    // Cancel the previous in-flight request (if any) before starting a new one.
+    fetchAbortController?.abort()
+    const controller = new AbortController()
+    fetchAbortController = controller
     set({ isLoading: true, error: null })
     try {
       const { filters } = get()
-      const response = await tenantsApi.getAll({
-        page: filters.page,
-        pageSize: filters.pageSize,
-        search: filters.search || undefined
-      })
+      const response = await tenantsApi.getAll(
+        {
+          page: filters.page,
+          pageSize: filters.pageSize,
+          search: filters.search || undefined
+        },
+        controller.signal
+      )
+      if (controller.signal.aborted) return
       set({ items: response.items, totalCount: response.totalCount })
     } catch (err) {
+      // A superceded request is expected to abort — ignore it. This is what keeps
+      // a slow stale response from clobbering the freshest one.
+      if (controller.signal.aborted) return
       const message = err instanceof Error ? err.message : 'Failed to load tenants'
       set({ error: message })
     } finally {
-      set({ isLoading: false })
+      // Only the latest request clears the spinner; an aborted (older) one must
+      // not flip isLoading off while a newer request is still running.
+      if (fetchAbortController === controller) {
+        fetchAbortController = null
+        set({ isLoading: false })
+      }
     }
   },
 

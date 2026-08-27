@@ -16,8 +16,7 @@ const mockUser = {
 }
 
 vi.mock('../auth.store', () => ({
-  useAuthStore: (selector: (s: unknown) => unknown) =>
-    selector({ user: mockUser, logout: vi.fn() }),
+  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: mockUser, logout: vi.fn() }),
   selectFullName: () => 'Ann Adams',
   selectInitials: () => 'AA',
   selectIsAdmin: () => false,

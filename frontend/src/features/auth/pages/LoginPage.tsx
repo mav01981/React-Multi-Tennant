@@ -9,6 +9,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
 import { useAuthStore, selectIsAuthenticated } from '../auth.store'
 import { ERROR_CODE } from '../auth.types'
+import { ApiClientError } from '@/shared/api/client'
 
 export function LoginPage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -31,12 +32,17 @@ export function LoginPage(): React.JSX.Element {
       await login({ tenantSlug: tenantSlug.trim().toLowerCase(), email, password })
       navigate('/', { replace: true })
     } catch (err) {
-      const code = (err as { code?: string }).code
-      if (code === ERROR_CODE.ACCOUNT_LOCKED) setError('Account is locked. Contact support.')
-      else if (code === ERROR_CODE.INVALID_CREDENTIALS) setError('Email or password is incorrect.')
-      else if (code === ERROR_CODE.TENANT_NOT_FOUND) setError('Unknown workspace. Check the tenant name.')
-      else if (code === ERROR_CODE.TENANT_SUSPENDED) setError('This workspace is suspended. Contact support.')
-      else setError((err as Error).message || 'Login failed. Please try again.')
+      if (err instanceof ApiClientError && err.code === ERROR_CODE.ACCOUNT_LOCKED) {
+        setError('Account is locked. Contact support.')
+      } else if (err instanceof ApiClientError && err.code === ERROR_CODE.INVALID_CREDENTIALS) {
+        setError('Email or password is incorrect.')
+      } else if (err instanceof ApiClientError && err.code === ERROR_CODE.TENANT_NOT_FOUND) {
+        setError('Unknown workspace. Check the tenant name.')
+      } else if (err instanceof ApiClientError && err.code === ERROR_CODE.TENANT_SUSPENDED) {
+        setError('This workspace is suspended. Contact support.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Login failed. Please try again.')
+      }
     }
   }
 

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import type { RoleDto } from '@/features/users/users.types'
 import { rolesApi } from './roles.api'
@@ -26,6 +27,12 @@ export const useRolesStore = create<RolesState>((set, get) => ({
     try {
       const roles = await rolesApi.getAll()
       set({ roles, hasLoaded: true })
+    } catch {
+      // Fail closed: a user without `roles.read` (e.g. Manager/ReadOnly) cannot
+      // fetch the catalog and gets a 403. Mark it loaded-but-empty so permission
+      // guards evaluate to "denied" and redirect, instead of leaving the UI stuck
+      // loading forever (and never mounting the app).
+      set({ roles: [], hasLoaded: true })
     } finally {
       set({ isLoading: false })
     }
@@ -40,11 +47,14 @@ export function useHasPermission(permission: string): boolean {
   const user = useAuthStore((s) => s.user)
   const roles = useRolesStore((s) => s.roles)
 
-  // No identity or no role catalog loaded → nothing is granted (fail closed).
-  if (!user || roles.length === 0) return false
+  // Memoize the (pure) catalog lookup so it isn't recomputed on every render —
+  // the role catalog is static for the session, so `roles`/`user` change rarely
+  // and this recomputation cost is then paid once per change, not per render.
+  return useMemo(() => {
+    // No identity or no role catalog loaded → nothing is granted (fail closed).
+    if (!user || roles.length === 0) return false
 
-  const grantedRoles = user.roles
-  return roles
-    .filter((role) => grantedRoles.includes(role.name))
-    .some((role) => role.permissions.includes(permission))
+    const grantedRoles = user.roles
+    return roles.filter((role) => grantedRoles.includes(role.name)).some((role) => role.permissions.includes(permission))
+  }, [user, roles, permission])
 }

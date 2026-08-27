@@ -19,7 +19,7 @@ export interface UsersListParams {
 }
 
 export const usersApi = {
-  async getAll(params: UsersListParams = {}): Promise<UserListResponse> {
+  async getAll(params: UsersListParams = {}, signal?: AbortSignal): Promise<UserListResponse> {
     const query = new URLSearchParams()
     if (params.page) query.set('page', String(params.page))
     if (params.pageSize) query.set('pageSize', String(params.pageSize))
@@ -31,7 +31,7 @@ export const usersApi = {
 
     const queryStr = query.toString()
     const path = queryStr ? `/users?${queryStr}` : '/users'
-    return apiFetch<UserListResponse>(path, { method: 'GET' })
+    return apiFetch<UserListResponse>(path, { method: 'GET', ...(signal ? { signal } : {}) })
   },
 
   async getById(id: string): Promise<UserDto> {

@@ -1,9 +1,4 @@
-import type {
-  TenantDto,
-  TenantListResponse,
-  CreateTenantRequest,
-  UpdateTenantRequest
-} from './tenants.types'
+import type { TenantDto, TenantListResponse, CreateTenantRequest, UpdateTenantRequest } from './tenants.types'
 import { apiFetch } from '@/shared/api/client'
 
 export interface TenantsListParams {
@@ -13,7 +8,7 @@ export interface TenantsListParams {
 }
 
 export const tenantsApi = {
-  async getAll(params: TenantsListParams = {}): Promise<TenantListResponse> {
+  async getAll(params: TenantsListParams = {}, signal?: AbortSignal): Promise<TenantListResponse> {
     const query = new URLSearchParams()
     if (params.page) query.set('page', String(params.page))
     if (params.pageSize) query.set('pageSize', String(params.pageSize))
@@ -21,7 +16,7 @@ export const tenantsApi = {
 
     const queryStr = query.toString()
     const path = queryStr ? `/tenants?${queryStr}` : '/tenants'
-    return apiFetch<TenantListResponse>(path, { method: 'GET' })
+    return apiFetch<TenantListResponse>(path, { method: 'GET', ...(signal ? { signal } : {}) })
   },
 
   async create(data: CreateTenantRequest): Promise<TenantDto> {

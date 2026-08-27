@@ -6,14 +6,15 @@ import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useRolesStore } from './roles.store'
 
-const PERMISSION_COLOR: Record<string, 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'default'> = {
-  'users.read': 'primary',
-  'users.write': 'warning',
-  'users.delete': 'error',
-  'roles.read': 'info',
-  'profile.read': 'success',
-  'profile.write': 'success'
-}
+const PERMISSION_COLOR: Record<string, 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'default'> =
+  {
+    'users.read': 'primary',
+    'users.write': 'warning',
+    'users.delete': 'error',
+    'roles.read': 'info',
+    'profile.read': 'success',
+    'profile.write': 'success'
+  }
 
 /**
  * Read-only Roles & Permissions view (feat-04 §3.3). Demonstrates the lazy-once
@@ -36,8 +37,7 @@ export function RolesPage(): React.JSX.Element {
         Roles &amp; Permissions
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Read-only catalog. Permissions drive both the UI guards and the backend
-        authorization for protected endpoints.
+        Read-only catalog. Permissions drive both the UI guards and the backend authorization for protected endpoints.
       </Typography>
 
       {isLoading && !hasLoaded ? (

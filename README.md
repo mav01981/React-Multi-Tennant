@@ -13,7 +13,8 @@ Multi-tenant identity demo implementing the feature specs in [`docs/features/`](
 | Layer | Tech | Location |
 |-------|------|----------|
 | Frontend | React 18 + TypeScript + Zustand + MUI + Vite | [`frontend/`](frontend/) |
-| Backend | ASP.NET Core 10 (Identity) + EF Core | [`backend/`](backend/) |
+| Backend | ASP.NET Core 10 (Identity) + EF Core | [`Identity.API/`](Identity.API/) and friends |
+| E2E tests | Playwright (chromium) | [`frontend/e2e/`](frontend/e2e/) |
 
 ## Multi-tenancy
 
@@ -25,8 +26,7 @@ Multi-tenant identity demo implementing the feature specs in [`docs/features/`](
 ## Backend
 
 ```
-cd backend
-dotnet run --urls http://localhost:5099
+dotnet run --project Identity.API --urls http://localhost:5099
 ```
 
 - Endpoints (base `/api/v1`): `auth/*`, `users/*`, `roles`, `tenants` — see [`docs/contracts/api-contract.md`](docs/contracts/api-contract.md).
@@ -50,8 +50,27 @@ cd frontend
 npm install
 npm run dev          # serves on http://localhost:5173, proxies /api -> http://localhost:5099
 npm test             # vitest unit/component tests
+npm run test:e2e     # Playwright E2E (starts API + Vite dev server automatically)
 npm run build        # type-check + production bundle
 ```
+
+## End-to-end tests (Playwright)
+
+Browser E2E specs live in [`frontend/e2e/`](frontend/e2e/) — `auth`, `users`,
+`profile`, `permissions`. Run them with:
+
+```bash
+cd frontend
+npx playwright install chromium   # first time only
+npm run test:e2e
+```
+
+- [`frontend/playwright.config.ts`](frontend/playwright.config.ts) launches **both** servers itself:
+  the Identity.API (`dotnet run`, port 5099, EF InMemory reseeded every run) and the
+  Vite dev server (port 5173, proxying `/api`) — no manual server startup needed.
+- Specs run serially on a single worker because they share one backend with
+  mutable user data.
+- Seeded logins: `admin@example.com` / `ChangeMe-Admin-1!` (PlatformAdmin, `platform` workspace).
 
 - Feature modules under `src/features/` — each owns its store, API client, guards and pages:
   - `features/auth` — Zustand `auth` store (`selectIsAuthenticated`, …), login page, route guard.
@@ -61,6 +80,16 @@ npm run build        # type-check + production bundle
 - API client implements the **single-flight refresh + replay** interceptor — `src/shared/api/client.ts`; it also attaches `X-Tenant-Id` on every request.
 - Hydration: `src/app/main.tsx` calls `fetchCurrentUser()` and loads the role catalog before first render (silent re-auth).
 - Light/dark theme is a client-side preference persisted in `localStorage` (`themeMode`) — not synced to the backend.
+
+## CI
+
+GitHub Actions workflows live in [`.github/workflows/`](.github/workflows/):
+
+| Workflow | What it does |
+|----------|--------------|
+| [`backend-build.yml`](.github/workflows/backend-build.yml) | .NET build + xUnit tests with coverage |
+| [`frontend-tests.yml`](.github/workflows/frontend-tests.yml) | Typecheck + Vitest with coverage |
+| [`e2e-tests.yml`](.github/workflows/e2e-tests.yml) | Playwright E2E on chromium — installs .NET 10 + Node 22, builds the API, and lets the Playwright config start both servers; uploads report/test-results artifacts |
 
 ## Specs
 

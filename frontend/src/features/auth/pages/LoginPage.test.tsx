@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { LoginPage } from './LoginPage'
 import { useAuthStore } from '../auth.store'
 import { ERROR_CODE } from '../auth.types'
+import { ApiClientError } from '@/shared/api/client'
 
 const { authApiMock } = vi.hoisted(() => ({
   authApiMock: { login: vi.fn(), logout: vi.fn(), refresh: vi.fn(), me: vi.fn() }
@@ -72,7 +73,7 @@ describe('LoginPage', () => {
   })
 
   it('shows a friendly message for invalid credentials', async () => {
-    authApiMock.login.mockRejectedValue({ code: ERROR_CODE.INVALID_CREDENTIALS })
+    authApiMock.login.mockRejectedValue(new ApiClientError(401, ERROR_CODE.INVALID_CREDENTIALS, 'Invalid credentials'))
 
     renderLogin()
     await submitCredentials('ann@example.com', 'wrong')
@@ -81,7 +82,7 @@ describe('LoginPage', () => {
   })
 
   it('shows a lockout message for a locked account', async () => {
-    authApiMock.login.mockRejectedValue({ code: ERROR_CODE.ACCOUNT_LOCKED })
+    authApiMock.login.mockRejectedValue(new ApiClientError(423, ERROR_CODE.ACCOUNT_LOCKED, 'Account locked'))
 
     renderLogin()
     await submitCredentials('ann@example.com', 'pw')

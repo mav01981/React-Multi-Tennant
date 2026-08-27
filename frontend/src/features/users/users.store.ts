@@ -3,6 +3,11 @@ import type { UserListItem, UserFilters, CreateUserRequest, UpdateUserRequest } 
 import { usersApi } from './api'
 import { useAuthStore } from '@/features/auth/auth.store'
 
+// Guards against filter-storm races on the list page: a stale (superceded)
+// response must never overwrite a newer one, so only the latest in-flight
+// request is allowed to commit its result into state.
+let fetchAbortController: AbortController | null = null
+
 interface UsersState {
   // ── State ──────────────────────────────
   items: UserListItem[]
@@ -26,17 +31,13 @@ interface UsersState {
 }
 
 // ── Selectors ──────────────────────────────────────────
-export const selectSelectedUser = (s: UsersState) =>
-  s.items.find(u => u.id === s.selectedUserId) ?? null
+export const selectSelectedUser = (s: UsersState) => s.items.find((u) => u.id === s.selectedUserId) ?? null
 
-export const selectTotalPages = (s: UsersState) =>
-  Math.ceil(s.totalCount / s.filters.pageSize)
+export const selectTotalPages = (s: UsersState) => Math.ceil(s.totalCount / s.filters.pageSize)
 
-export const selectHasNextPage = (s: UsersState) =>
-  s.filters.page < selectTotalPages(s)
+export const selectHasNextPage = (s: UsersState) => s.filters.page < selectTotalPages(s)
 
-export const selectHasPrevPage = (s: UsersState) =>
-  s.filters.page > 1
+export const selectHasPrevPage = (s: UsersState) => s.filters.page > 1
 
 export const useUsersStore = create<UsersState>((set, get) => ({
   items: [],
@@ -53,22 +54,38 @@ export const useUsersStore = create<UsersState>((set, get) => ({
   error: null,
 
   fetchUsers: async () => {
+    // Cancel the previous in-flight request (if any) before starting a new one.
+    fetchAbortController?.abort()
+    const controller = new AbortController()
+    fetchAbortController = controller
     set({ isLoading: true, error: null })
     try {
       const { filters } = get()
-      const response = await usersApi.getAll({
-        page: filters.page,
-        pageSize: filters.pageSize,
-        search: filters.search || undefined,
-        role: filters.role || undefined,
-        status: filters.status
-      })
+      const response = await usersApi.getAll(
+        {
+          page: filters.page,
+          pageSize: filters.pageSize,
+          search: filters.search || undefined,
+          role: filters.role || undefined,
+          status: filters.status
+        },
+        controller.signal
+      )
+      if (controller.signal.aborted) return
       set({ items: response.items, totalCount: response.totalCount })
     } catch (err) {
+      // A superceded request is expected to abort — ignore it. This is what keeps
+      // a slow stale response from clobbering the freshest one.
+      if (controller.signal.aborted) return
       const message = err instanceof Error ? err.message : 'Failed to load users'
       set({ error: message })
     } finally {
-      set({ isLoading: false })
+      // Only the latest request clears the spinner; an aborted (older) one must
+      // not flip isLoading off while a newer request is still running.
+      if (fetchAbortController === controller) {
+        fetchAbortController = null
+        set({ isLoading: false })
+      }
     }
   },
 

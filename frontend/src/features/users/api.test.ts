@@ -17,7 +17,15 @@ describe('usersApi.getAll – query building', () => {
 
   it('encodes active filters into the query string', async () => {
     apiFetchMock.mockResolvedValue({})
-    await usersApi.getAll({ page: 2, pageSize: 25, search: 'ann', role: 'Admin', status: 'active', sortBy: 'email', sortDir: 'desc' })
+    await usersApi.getAll({
+      page: 2,
+      pageSize: 25,
+      search: 'ann',
+      role: 'Admin',
+      status: 'active',
+      sortBy: 'email',
+      sortDir: 'desc'
+    })
     expect(apiFetchMock).toHaveBeenCalledWith(
       '/users?page=2&pageSize=25&search=ann&role=Admin&status=active&sortBy=email&sortDir=desc',
       { method: 'GET' }

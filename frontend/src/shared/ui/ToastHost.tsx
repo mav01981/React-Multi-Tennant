@@ -29,11 +29,7 @@ export function ToastHost(): React.JSX.Element {
           anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
           onClose={() => removeToast(toast.id)}
         >
-          <Alert
-            severity={SEVERITY[toast.type] ?? 'info'}
-            variant="filled"
-            onClose={() => removeToast(toast.id)}
-          >
+          <Alert severity={SEVERITY[toast.type] ?? 'info'} variant="filled" onClose={() => removeToast(toast.id)}>
             {toast.message}
           </Alert>
         </Snackbar>

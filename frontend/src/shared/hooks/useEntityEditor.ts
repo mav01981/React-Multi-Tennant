@@ -37,10 +37,7 @@ type Action<T, F> =
   | { type: 'CLOSE_DELETE' }
   | { type: 'SET_DELETE_ERROR'; message: string | null }
 
-function reducer<T, F>(
-  state: EntityEditorState<T, F>,
-  action: Action<T, F>
-): EntityEditorState<T, F> {
+function reducer<T, F>(state: EntityEditorState<T, F>, action: Action<T, F>): EntityEditorState<T, F> {
   switch (action.type) {
     case 'OPEN_CREATE':
       return { ...state, showCreate: true, editingId: null, form: action.form, formError: null }

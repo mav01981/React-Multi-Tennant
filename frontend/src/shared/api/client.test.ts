@@ -6,8 +6,7 @@ function jsonResponse(status: number, body?: unknown): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
-    json: () =>
-      body === undefined ? Promise.reject(new Error('no body')) : Promise.resolve(body)
+    json: () => (body === undefined ? Promise.reject(new Error('no body')) : Promise.resolve(body))
   } as unknown as Response
 }
 
@@ -98,7 +97,9 @@ describe('apiFetch – single-flight refresh + replay', () => {
   it('refreshes on a 401 and replays the original request with the new token', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(401, { error: { code: 'UNAUTHENTICATED', message: 'expired' } }))
-      .mockResolvedValueOnce(jsonResponse(200, { accessToken: 'new-token', refreshToken: 'new-refresh', expiresIn: 900, user: {} }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, { accessToken: 'new-token', refreshToken: 'new-refresh', expiresIn: 900, user: {} })
+      )
       .mockResolvedValueOnce(jsonResponse(200, { data: 'ok' }))
 
     const result = await apiFetch<{ data: string }>('/secure', { method: 'GET' })

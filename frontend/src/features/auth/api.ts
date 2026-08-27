@@ -6,7 +6,8 @@ export const authApi = {
     return apiFetch<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
-      auth: false
+      auth: false,
+      headers: { 'X-Tenant-Id': credentials.tenantSlug }
     })
   },
 

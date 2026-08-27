@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { UserDto, LoginResponse } from './auth.types'
+import { ApiClientError } from '@/shared/api/client'
 import {
   useAuthStore,
   selectIsAuthenticated,
@@ -45,7 +46,8 @@ const baseState = {
   accessToken: null,
   refreshToken: null,
   isLoading: false,
-  error: null
+  error: null,
+  isInitialized: false
 }
 
 beforeEach(() => {
@@ -76,12 +78,28 @@ describe('auth store – login', () => {
     const err = new Error('Invalid credentials')
     authApiMock.login.mockRejectedValue(err)
 
-    await expect(useAuthStore.getState().login({ tenantSlug: 'acme', email: 'x', password: 'y' })).rejects.toThrow('Invalid credentials')
+    await expect(useAuthStore.getState().login({ tenantSlug: 'acme', email: 'x', password: 'y' })).rejects.toThrow(
+      'Invalid credentials'
+    )
 
     const state = useAuthStore.getState()
     expect(state.error).toBe('Invalid credentials')
     expect(state.accessToken).toBeNull()
     expect(state.isLoading).toBe(false)
+  })
+
+  it('does not persist the attempted tenant slug when login fails', async () => {
+    // A previous valid workspace is restored/stored; the failed attempt must not clobber it.
+    localStorage.setItem('tenantSlug', 'existing-tenant')
+    useAuthStore.setState({ tenantSlug: 'existing-tenant' })
+    authApiMock.login.mockRejectedValue(new Error('no such workspace'))
+
+    await expect(useAuthStore.getState().login({ tenantSlug: 'acme', email: 'x', password: 'y' })).rejects.toThrow(
+      'no such workspace'
+    )
+
+    expect(localStorage.getItem('tenantSlug')).toBe('existing-tenant')
+    expect(useAuthStore.getState().tenantSlug).toBe('existing-tenant')
   })
 })
 
@@ -114,16 +132,66 @@ describe('auth store – logout / fetchCurrentUser', () => {
     expect(useAuthStore.getState().user).toEqual(user)
   })
 
-  it('clears the session when /me fails', async () => {
+  it('clears the session when /me fails with a 401', async () => {
     useAuthStore.setState({ accessToken: 'at', refreshToken: 'rt', user })
     localStorage.setItem('accessToken', 'at')
     localStorage.setItem('refreshToken', 'rt')
-    authApiMock.me.mockRejectedValue(new Error('expired'))
+    authApiMock.me.mockRejectedValue(new ApiClientError(401, 'UNAUTHENTICATED', 'expired'))
 
-    await useAuthStore.getState().fetchCurrentUser()
+    await expect(useAuthStore.getState().fetchCurrentUser()).rejects.toThrow(ApiClientError)
 
     expect(useAuthStore.getState().accessToken).toBeNull()
     expect(useAuthStore.getState().refreshToken).toBeNull()
+    expect(useAuthStore.getState().user).toBeNull()
+  })
+})
+
+describe('auth store – initialize (silent re-auth on boot)', () => {
+  it('marks initialized immediately when there is no stored token', async () => {
+    useAuthStore.setState({ accessToken: null, isInitialized: false })
+
+    await useAuthStore.getState().initialize()
+
+    expect(authApiMock.me).not.toHaveBeenCalled()
+    expect(useAuthStore.getState().isInitialized).toBe(true)
+  })
+
+  it('hydrates the user and marks initialized when a token is restored', async () => {
+    useAuthStore.setState({ accessToken: 'at', isInitialized: false })
+    authApiMock.me.mockResolvedValue(user)
+
+    await useAuthStore.getState().initialize()
+
+    expect(authApiMock.me).toHaveBeenCalledTimes(1)
+    expect(useAuthStore.getState().user).toEqual(user)
+    expect(useAuthStore.getState().isInitialized).toBe(true)
+  })
+
+  it('clears the session yet still marks initialized when /me fails', async () => {
+    useAuthStore.setState({ accessToken: 'at', refreshToken: 'rt', user, isInitialized: false })
+    localStorage.setItem('accessToken', 'at')
+    localStorage.setItem('refreshToken', 'rt')
+    authApiMock.me.mockRejectedValue(new ApiClientError(401, 'UNAUTHENTICATED', 'expired'))
+
+    await expect(useAuthStore.getState().initialize()).rejects.toThrow(ApiClientError)
+
+    expect(authApiMock.me).toHaveBeenCalledTimes(1)
+    expect(useAuthStore.getState().accessToken).toBeNull()
+    expect(useAuthStore.getState().user).toBeNull()
+    // The splash must never be left hanging — even a failed /me settles the gate.
+    expect(useAuthStore.getState().isInitialized).toBe(true)
+  })
+})
+
+describe('auth store – setUser action', () => {
+  it('swaps the authenticated user', () => {
+    useAuthStore.getState().setUser(user)
+    expect(useAuthStore.getState().user).toEqual(user)
+  })
+
+  it('accepts null to clear the user', () => {
+    useAuthStore.setState({ user })
+    useAuthStore.getState().setUser(null)
     expect(useAuthStore.getState().user).toBeNull()
   })
 })

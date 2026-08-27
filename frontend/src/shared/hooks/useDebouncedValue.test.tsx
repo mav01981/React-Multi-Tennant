@@ -14,10 +14,9 @@ describe('useDebouncedValue', () => {
 
   it('emits a changed value only after the delay elapses', () => {
     vi.useFakeTimers()
-    const { result, rerender } = renderHook(
-      ({ value }) => useDebouncedValue(value, 300),
-      { initialProps: { value: 'a' } }
-    )
+    const { result, rerender } = renderHook(({ value }) => useDebouncedValue(value, 300), {
+      initialProps: { value: 'a' }
+    })
 
     rerender({ value: 'ab' })
     act(() => {
@@ -34,10 +33,9 @@ describe('useDebouncedValue', () => {
 
   it('restarts the timer on each change, so only the trailing value wins', () => {
     vi.useFakeTimers()
-    const { result, rerender } = renderHook(
-      ({ value }) => useDebouncedValue(value, 300),
-      { initialProps: { value: 'a' } }
-    )
+    const { result, rerender } = renderHook(({ value }) => useDebouncedValue(value, 300), {
+      initialProps: { value: 'a' }
+    })
 
     rerender({ value: 'ab' })
     act(() => {

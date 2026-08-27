@@ -93,8 +93,7 @@ export async function apiFetch<T>(path: string, init: RequestInit & { auth?: boo
   if (tenantSlug) headers.set('X-Tenant-Id', tenantSlug)
   if (auth && token) headers.set('Authorization', `Bearer ${token}`)
 
-  const doRequest = (): Promise<Response> =>
-    fetch(`${baseUrl}${path}`, { ...rest, headers })
+  const doRequest = (): Promise<Response> => fetch(`${baseUrl}${path}`, { ...rest, headers })
 
   let response = await doRequest()
 

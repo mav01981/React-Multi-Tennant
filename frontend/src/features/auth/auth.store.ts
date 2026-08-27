@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { LoginRequest, LoginResponse, UserDto } from './auth.types'
 import { authApi } from './api'
-import { setAuthHandlers } from '@/shared/api/client'
+import { ApiClientError, setAuthHandlers } from '@/shared/api/client'
 
 const STORAGE_KEYS = {
   access: 'accessToken',
@@ -9,7 +9,11 @@ const STORAGE_KEYS = {
   tenantSlug: 'tenantSlug'
 } as const
 
-function readStoredSession(): { accessToken: string | null; refreshToken: string | null; tenantSlug: string | null } {
+function readStoredSession(): {
+  accessToken: string | null
+  refreshToken: string | null
+  tenantSlug: string | null
+} {
   if (typeof window === 'undefined') return { accessToken: null, refreshToken: null, tenantSlug: null }
   return {
     accessToken: window.localStorage.getItem(STORAGE_KEYS.access),
@@ -26,11 +30,15 @@ interface AuthState {
   tenantSlug: string | null
   isLoading: boolean
   error: string | null
+  /** True once the initial boot hydration (silent re-auth) has settled. */
+  isInitialized: boolean
 
   login: (credentials: LoginRequest) => Promise<void>
   logout: () => Promise<void>
   fetchCurrentUser: () => Promise<void>
   refreshAccessToken: () => Promise<string | null>
+  initialize: () => Promise<void>
+  setUser: (user: UserDto | null) => void
 }
 
 const initial = readStoredSession()
@@ -42,13 +50,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   tenantSlug: initial.tenantSlug,
   isLoading: false,
   error: null,
+  isInitialized: false,
 
   login: async (credentials) => {
-    set({ isLoading: true, error: null, tenantSlug: credentials.tenantSlug })
-    window.localStorage.setItem(STORAGE_KEYS.tenantSlug, credentials.tenantSlug)
+    set({ isLoading: true, error: null })
     try {
       const response: LoginResponse = await authApi.login(credentials)
-      setSession(set, response)
+      // Persist the tenant slug only on success (setSession), so a failed login
+      // never leaks the attempted workspace into state or localStorage.
+      setSession(set, response, credentials.tenantSlug)
     } catch (err) {
       set({ error: extractError(err) })
       throw err
@@ -71,42 +81,72 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const user = await authApi.me()
       set({ user })
-    } catch {
-      // The interceptor already retried + cleared the session on unrecoverable
-      // 401s; ensure local state is wiped so the UI shows the login screen.
-      clearSession(set)
+    } catch (err) {
+      if (err instanceof ApiClientError && (err.status === 401 || err.status === 403)) {
+        clearSession(set)
+      }
+      throw err
     }
   },
 
   refreshAccessToken: async () => {
     const { accessToken, refreshToken } = get()
     if (!refreshToken || !accessToken) return null
-    const response: LoginResponse = await authApi.refresh({ accessToken, refreshToken })
+    const response: LoginResponse = await authApi.refresh({
+      accessToken,
+      refreshToken
+    })
     setSession(set, response)
     return response.accessToken
-  }
+  },
+
+  /**
+   * Boot hydration (called from main.tsx). Settles the `isInitialized` gate that
+   * the App splash waits on. Because the root is mounted first, this runs without
+   * ever blocking first paint. It always flips `isInitialized` — whether silent
+   * re-auth succeeds, finds no stored token, or fails outright.
+   */
+  initialize: async () => {
+    if (!get().accessToken) {
+      set({ isInitialized: true })
+      return
+    }
+    try {
+      await get().fetchCurrentUser()
+    } finally {
+      // Settle on success AND failure so the splash never hangs the app, even if
+      // /me throws in a way fetchCurrentUser did not already swallow.
+      set({ isInitialized: true })
+    }
+  },
+
+  setUser: (user) => set({ user })
 }))
 
 // ── Selectors (Zustand recomputed slices) ──────────────────────────────
 export const selectIsAuthenticated = (s: AuthState) => !!s.accessToken
 export const selectIsAdmin = (s: AuthState) => s.user?.roles.includes('Admin') ?? false
 export const selectIsManager = (s: AuthState) => s.user?.roles.includes('Manager') ?? false
-export const selectFullName = (s: AuthState) =>
-  s.user ? `${s.user.firstName} ${s.user.lastName}` : ''
-export const selectInitials = (s: AuthState) =>
-  s.user ? `${s.user.firstName[0]}${s.user.lastName[0]}` : ''
+export const selectFullName = (s: AuthState) => (s.user ? `${s.user.firstName} ${s.user.lastName}` : '')
+export const selectInitials = (s: AuthState) => (s.user ? `${s.user.firstName[0]}${s.user.lastName[0]}` : '')
 
 // ── Session helpers + client-handler registration ──────────────────────
 type SetState = (partial: Partial<AuthState>) => void
 
-function setSession(set: SetState, response: LoginResponse): void {
+function setSession(set: SetState, response: LoginResponse, tenantSlug?: string): void {
   set({
     accessToken: response.accessToken,
     refreshToken: response.refreshToken,
-    user: response.user
+    user: response.user,
+    ...(tenantSlug !== undefined ? { tenantSlug } : {})
   })
   window.localStorage.setItem(STORAGE_KEYS.access, response.accessToken)
   window.localStorage.setItem(STORAGE_KEYS.refresh, response.refreshToken)
+  // Persist the tenant slug only when provided (successful login). The refresh
+  // path calls setSession without it, preserving the already-active workspace.
+  if (tenantSlug !== undefined) {
+    window.localStorage.setItem(STORAGE_KEYS.tenantSlug, tenantSlug)
+  }
 }
 
 function clearSession(set: SetState): void {
@@ -127,8 +167,15 @@ function extractError(err: unknown): string {
  * client never imports this module.
  */
 setAuthHandlers({
-  getTokens: () => ({ accessToken: useAuthStore.getState().accessToken, refreshToken: useAuthStore.getState().refreshToken }),
+  getTokens: () => ({
+    accessToken: useAuthStore.getState().accessToken,
+    refreshToken: useAuthStore.getState().refreshToken
+  }),
   getTenantSlug: () => useAuthStore.getState().tenantSlug,
-  onSessionUpdated: (tokens) => useAuthStore.setState({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }),
+  onSessionUpdated: (tokens) =>
+    useAuthStore.setState({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken
+    }),
   onSessionCleared: () => clearSession(useAuthStore.setState.bind(useAuthStore))
 })

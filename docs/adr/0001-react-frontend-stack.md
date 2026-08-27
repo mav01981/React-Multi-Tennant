@@ -18,7 +18,7 @@ Use React 18 with TypeScript, Vite, and Zustand:
 
 ## Consequences
 
-The frontend stays small and feature-oriented with minimal framework overhead. State updates are explicit and selector-based. The team owns conventions for API synchronization and does not get a larger batteries-included framework or server-state cache by default.
+The frontend stays small and feature-oriented with minimal framework overhead. State updates are explicit and selector-based.
 
 ## Alternatives considered
 
