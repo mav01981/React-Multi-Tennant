@@ -53,6 +53,32 @@ describe('apiFetch – request construction', () => {
     // A JSON body still gets a Content-Type.
     expect(init.headers.get('Content-Type')).toBe('application/json')
   })
+  it('an explicit per-request X-Tenant-Id wins over the stored session slug', async () => {
+    // Regression: a stale tenantSlug from a previous session used to OVERWRITE the
+    // login form's workspace, sending the login to the wrong tenant (401).
+    fetchMock.mockResolvedValue(jsonResponse(200, { ok: true }))
+    setAuthHandlers({ ...handlers, getTenantSlug: () => 'stale-tenant' })
+
+    await apiFetch('/auth/login', {
+      method: 'POST',
+      body: '{}',
+      auth: false,
+      headers: { 'X-Tenant-Id': 'platform' }
+    })
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers.get('X-Tenant-Id')).toBe('platform')
+  })
+
+  it('uses the stored session slug when the request does not set one', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { ok: true }))
+    setAuthHandlers({ ...handlers, getTenantSlug: () => 'acme' })
+
+    await apiFetch('/users', { method: 'GET' })
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers.get('X-Tenant-Id')).toBe('acme')
+  })
 
   it('returns undefined for a 204 response', async () => {
     fetchMock.mockResolvedValue(jsonResponse(204))

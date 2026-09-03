@@ -55,6 +55,8 @@ export function useHasPermission(permission: string): boolean {
     if (!user || roles.length === 0) return false
 
     const grantedRoles = user.roles
-    return roles.filter((role) => grantedRoles.includes(role.name)).some((role) => role.permissions.includes(permission))
+    return roles
+      .filter((role) => grantedRoles.includes(role.name))
+      .some((role) => role.permissions.includes(permission))
   }, [user, roles, permission])
 }

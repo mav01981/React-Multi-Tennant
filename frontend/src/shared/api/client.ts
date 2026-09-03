@@ -89,8 +89,10 @@ export async function apiFetch<T>(path: string, init: RequestInit & { auth?: boo
   if (rest.body) headers.set('Content-Type', 'application/json')
   // Multi-tenancy: the workspace slug rides along on every request. After login the
   // JWT's tid claim is authoritative, but the header is what carries it pre-auth.
+  // Callers may pass an explicit X-Tenant-Id (e.g. the login form's Workspace field) —
+  // that wins over any stale slug left over from a previous session in the store.
   const tenantSlug = handlers?.getTenantSlug()
-  if (tenantSlug) headers.set('X-Tenant-Id', tenantSlug)
+  if (tenantSlug && !headers.has('X-Tenant-Id')) headers.set('X-Tenant-Id', tenantSlug)
   if (auth && token) headers.set('Authorization', `Bearer ${token}`)
 
   const doRequest = (): Promise<Response> => fetch(`${baseUrl}${path}`, { ...rest, headers })

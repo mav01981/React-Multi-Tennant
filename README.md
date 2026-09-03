@@ -23,6 +23,15 @@ Multi-tenant identity demo implementing the feature specs in [`docs/features/`](
 - A reserved `platform` tenant hosts the bootstrap **PlatformAdmin** super-admin (`admin@example.com` / `ChangeMe-Admin-1!`), who can manage all tenants via `GET/POST/PUT/DELETE /api/v1/tenants`.
 - Suspending a tenant rejects new logins with `422 TENANT_SUSPENDED`; deleting is a soft-delete.
 
+## API Documentation
+
+Interactive API documentation is served by [Scalar](https://github.com/scalar/scalar) once the backend is running:
+
+- **Scalar UI:** http://localhost:5099/scalar/ — browse and try the endpoints directly from the browser.
+- **OpenAPI spec:** http://localhost:5099/openapi/v1.json
+
+Start the backend first (`dotnet run --project Identity.API --urls http://localhost:5099`), then open the URL above. API documentation is only enabled in **non-production** environments (see the `MapOpenApi()` / `MapScalarApiReference()` block in [`Identity.API/Program.cs`](Identity.API/Program.cs)).
+
 ## Backend
 
 ```
