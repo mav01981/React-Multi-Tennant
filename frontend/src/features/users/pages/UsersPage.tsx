@@ -21,6 +21,7 @@ import { useUsersStore } from '../users.store'
 import type { CreateUserRequest, UpdateUserRequest } from '../users.types'
 import { useUiStore } from '@/shared/ui/ui.store'
 import { useRolesStore, useHasPermission } from '@/features/roles/roles.store'
+import type { RoleName } from '@/features/roles/permissions'
 import { useEntityEditorState } from '@/shared/hooks/useEntityEditor'
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue'
 
@@ -173,7 +174,7 @@ export function UsersPage(): React.JSX.Element {
             size="small"
             label="Role"
             value={filters.role ?? ''}
-            onChange={(e) => setRole(e.target.value || null)}
+            onChange={(e) => setRole((e.target.value || null) as RoleName | null)}
             sx={{ minWidth: 150 }}
           >
             <MenuItem value="">All roles</MenuItem>
@@ -241,7 +242,7 @@ export function UsersPage(): React.JSX.Element {
               select
               label="Role"
               value={form.roles[0] ?? ''}
-              onChange={(e) => updateForm({ roles: e.target.value ? [e.target.value] : [] })}
+              onChange={(e) => updateForm({ roles: e.target.value ? [e.target.value as RoleName] : [] })}
             >
               <MenuItem value="">No role</MenuItem>
               {roles.map((role) => (

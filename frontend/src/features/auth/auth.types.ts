@@ -1,10 +1,12 @@
 // api-contract.md DTOs (subset for the auth feature)
+import type { RoleName } from '@/features/roles/permissions'
+
 export interface UserDto {
   id: string
   email: string
   firstName: string
   lastName: string
-  roles: string[]
+  roles: RoleName[]
   status: 'active' | 'locked' | 'disabled'
   createdAt: string
   updatedAt: string

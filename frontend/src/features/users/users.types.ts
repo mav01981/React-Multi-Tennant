@@ -1,4 +1,5 @@
 import type { UserDto } from '@/features/auth/auth.types'
+import type { RoleName, Permission } from '@/features/roles/permissions'
 
 // User list item (same as UserDto for now, but kept separate per contract)
 export type UserListItem = UserDto
@@ -16,7 +17,7 @@ export interface CreateUserRequest {
   firstName: string
   lastName: string
   password: string
-  roles: string[]
+  roles: RoleName[]
 }
 
 export interface UpdateUserRequest {
@@ -24,7 +25,7 @@ export interface UpdateUserRequest {
   firstName?: string
   lastName?: string
   status?: 'active' | 'locked' | 'disabled'
-  roles?: string[]
+  roles?: RoleName[]
 }
 
 export interface UpdateProfileRequest {
@@ -39,13 +40,13 @@ export interface ChangePasswordRequest {
 
 export interface RoleDto {
   id: string
-  name: string
-  permissions: string[]
+  name: RoleName
+  permissions: Permission[]
 }
 
 export interface UserFilters {
   search: string
-  role: string | null
+  role: RoleName | null
   status: 'all' | 'active' | 'locked' | 'disabled'
   page: number
   pageSize: number

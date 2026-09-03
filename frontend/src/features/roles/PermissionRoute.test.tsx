@@ -24,7 +24,7 @@ const user: UserDto = {
 
 const roleCatalog: RoleDto[] = [
   { id: 'r1', name: 'Admin', permissions: ['users.read', 'users.write', 'roles.read'] },
-  { id: 'r2', name: 'User', permissions: [] }
+  { id: 'r2', name: 'ReadOnly', permissions: [] }
 ]
 
 function renderGuarded(): void {
@@ -54,7 +54,7 @@ describe('RequirePermission', () => {
   })
 
   it('denies a user who lacks the required permission', () => {
-    useAuthStore.setState({ user: { ...user, roles: ['User'] }, accessToken: 'token' })
+    useAuthStore.setState({ user: { ...user, roles: ['ReadOnly'] }, accessToken: 'token' })
     useRolesStore.setState({ roles: roleCatalog, hasLoaded: true })
     renderGuarded()
     expect(screen.getByText('ROOT_MARKER')).toBeInTheDocument()

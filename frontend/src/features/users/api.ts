@@ -1,10 +1,5 @@
-import type {
-  UserListResponse,
-  CreateUserRequest,
-  UpdateUserRequest,
-  UpdateProfileRequest,
-  ChangePasswordRequest
-} from './users.types'
+import type { UserListResponse, CreateUserRequest, UpdateUserRequest, UpdateProfileRequest, ChangePasswordRequest } from './users.types'
+import type { RoleName } from '@/features/roles/permissions'
 import type { UserDto } from '@/features/auth/auth.types'
 import { apiFetch } from '@/shared/api/client'
 
@@ -12,7 +7,7 @@ export interface UsersListParams {
   page?: number
   pageSize?: number
   search?: string
-  role?: string
+  role?: RoleName
   status?: 'all' | 'active' | 'locked' | 'disabled'
   sortBy?: string
   sortDir?: 'asc' | 'desc'

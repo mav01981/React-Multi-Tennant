@@ -41,7 +41,7 @@ const users: UserDto[] = [
     email: 'bob@example.com',
     firstName: 'Bob',
     lastName: 'Banks',
-    roles: ['User'],
+    roles: ['ReadOnly'],
     status: 'active',
     createdAt: '2025-01-02T00:00:00Z',
     updatedAt: '2025-01-02T00:00:00Z',

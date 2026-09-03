@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { create } from 'zustand'
 import type { RoleDto } from '@/features/users/users.types'
+import type { Permission } from './permissions'
 import { rolesApi } from './roles.api'
 import { useAuthStore } from '@/features/auth/auth.store'
 
@@ -42,8 +43,13 @@ export const useRolesStore = create<RolesState>((set, get) => ({
 // ── Selectors ──────────────────────────────────────────────
 export const selectRoles = (s: RolesState) => s.roles
 
-/** Whether the current authenticated user holds a given permission (feat-04 §5). */
-export function useHasPermission(permission: string): boolean {
+/**
+ * Whether the current authenticated user holds a given permission (feat-04 §5).
+ * The `permission` argument is the `Permission` union — a typo'd literal like
+ * `'users.reads'` fails to compile. For a non-hook check see `hasPermission`
+ * in `./permissions`.
+ */
+export function useHasPermission(permission: Permission): boolean {
   const user = useAuthStore((s) => s.user)
   const roles = useRolesStore((s) => s.roles)
 

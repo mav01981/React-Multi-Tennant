@@ -15,7 +15,7 @@ const rolesApiMock = rolesApi.getAll as unknown as ReturnType<typeof vi.fn>
 const roleCatalog: RoleDto[] = [
   { id: 'r1', name: 'Admin', permissions: ['users.read', 'users.write', 'users.delete', 'roles.read', 'profile.read'] },
   { id: 'r2', name: 'Manager', permissions: ['users.read', 'profile.read'] },
-  { id: 'r3', name: 'User', permissions: ['profile.read'] }
+  { id: 'r3', name: 'ReadOnly', permissions: ['profile.read'] }
 ]
 
 const user: UserDto = {
@@ -60,7 +60,7 @@ describe('useHasPermission', () => {
   })
 
   it('denies a permission the role catalog does not grant', () => {
-    useAuthStore.setState({ user: { ...user, roles: ['User'] } })
+    useAuthStore.setState({ user: { ...user, roles: ['ReadOnly'] } })
     useRolesStore.setState({ roles: roleCatalog, hasLoaded: true })
 
     const { result } = renderHook(() => useHasPermission('users.read'))

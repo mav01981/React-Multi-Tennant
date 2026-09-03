@@ -5,15 +5,18 @@ import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useRolesStore } from './roles.store'
+import type { Permission } from './permissions'
 
-const PERMISSION_COLOR: Record<string, 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'default'> =
+const PERMISSION_COLOR: Record<Permission, 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'default'> =
   {
     'users.read': 'primary',
     'users.write': 'warning',
     'users.delete': 'error',
     'roles.read': 'info',
     'profile.read': 'success',
-    'profile.write': 'success'
+    'profile.write': 'success',
+    'tenants.read': 'secondary',
+    'tenants.write': 'error'
   }
 
 /**

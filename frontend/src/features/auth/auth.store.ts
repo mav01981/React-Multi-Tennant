@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { LoginRequest, LoginResponse, UserDto } from './auth.types'
 import { authApi } from './api'
 import { ApiClientError, setAuthHandlers } from '@/shared/api/client'
+import { ROLE } from '@/features/roles/permissions'
 
 const STORAGE_KEYS = {
   access: 'accessToken',
@@ -125,8 +126,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 // ── Selectors (Zustand recomputed slices) ──────────────────────────────
 export const selectIsAuthenticated = (s: AuthState) => !!s.accessToken
-export const selectIsAdmin = (s: AuthState) => s.user?.roles.includes('Admin') ?? false
-export const selectIsManager = (s: AuthState) => s.user?.roles.includes('Manager') ?? false
+export const selectIsAdmin = (s: AuthState) => s.user?.roles.includes(ROLE.ADMIN) ?? false
+export const selectIsManager = (s: AuthState) => s.user?.roles.includes(ROLE.MANAGER) ?? false
 export const selectFullName = (s: AuthState) => (s.user ? `${s.user.firstName} ${s.user.lastName}` : '')
 export const selectInitials = (s: AuthState) => (s.user ? `${s.user.firstName[0]}${s.user.lastName[0]}` : '')
 

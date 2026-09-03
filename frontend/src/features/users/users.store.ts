@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { UserListItem, UserFilters, CreateUserRequest, UpdateUserRequest } from './users.types'
+import type { RoleName } from '@/features/roles/permissions'
 import { usersApi } from './api'
 import { useAuthStore } from '@/features/auth/auth.store'
 
@@ -24,7 +25,7 @@ interface UsersState {
   deleteUser: (id: string) => Promise<void>
   setPage: (page: number) => void
   setSearch: (search: string) => void
-  setRole: (role: string | null) => void
+  setRole: (role: RoleName | null) => void
   setStatus: (status: 'all' | 'active' | 'locked' | 'disabled') => void
   setSelectedUserId: (id: string | null) => void
   clearError: () => void
