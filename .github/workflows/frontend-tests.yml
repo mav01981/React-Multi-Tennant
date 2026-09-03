@@ -30,7 +30,8 @@ jobs:
         run: npm run typecheck
 
       - name: Run tests with coverage
-        run: npm run test:coverage -- --reporter=basic
+        # NOTE: the 'basic' reporter was removed in Vitest 3+ — use the default one.
+        run: npm run test:coverage -- --reporter=default
 
       - name: Generate coverage summary
         if: always()

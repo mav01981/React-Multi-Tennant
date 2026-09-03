@@ -136,32 +136,6 @@ describe('tenants store – fetchTenants', () => {
       useTenantsStore.getState().setPage(0)
       expect(useTenantsStore.getState().filters.page).toBe(1)
 
-      describe('tenants store selectors', () => {
-        it('selectSelectedTenant resolves the selected id to an item', () => {
-          useTenantsStore.setState({ items: tenants, selectedTenantId: 't2' })
-          expect(selectSelectedTenant(useTenantsStore.getState())?.id).toBe('t2')
-          useTenantsStore.setState({ selectedTenantId: null })
-          expect(selectSelectedTenant(useTenantsStore.getState())).toBeNull()
-        })
-
-        it('derives total/next/previous pages from the count and filters', () => {
-          useTenantsStore.setState({
-            totalCount: 25,
-            filters: { ...useTenantsStore.getState().filters, page: 2, pageSize: 10 }
-          })
-
-          expect(selectTotalPages(useTenantsStore.getState())).toBe(3)
-          expect(selectHasNextPage(useTenantsStore.getState())).toBe(true)
-          expect(selectHasPrevPage(useTenantsStore.getState())).toBe(true)
-
-          useTenantsStore.setState({ filters: { ...useTenantsStore.getState().filters, page: 3 } })
-          expect(selectHasNextPage(useTenantsStore.getState())).toBe(false)
-
-          useTenantsStore.setState({ filters: { ...useTenantsStore.getState().filters, page: 1 } })
-          expect(selectHasPrevPage(useTenantsStore.getState())).toBe(false)
-        })
-      })
-
       expect(tenantsApiMock.getAll).toHaveBeenCalled()
     })
 
@@ -173,6 +147,32 @@ describe('tenants store – fetchTenants', () => {
 
       expect(useTenantsStore.getState().filters.page).toBe(1)
       expect(useTenantsStore.getState().filters.search).toBe('glo')
+    })
+  })
+
+  describe('tenants store selectors', () => {
+    it('selectSelectedTenant resolves the selected id to an item', () => {
+      useTenantsStore.setState({ items: tenants, selectedTenantId: 't2' })
+      expect(selectSelectedTenant(useTenantsStore.getState())?.id).toBe('t2')
+      useTenantsStore.setState({ selectedTenantId: null })
+      expect(selectSelectedTenant(useTenantsStore.getState())).toBeNull()
+    })
+
+    it('derives total/next/previous pages from the count and filters', () => {
+      useTenantsStore.setState({
+        totalCount: 25,
+        filters: { ...useTenantsStore.getState().filters, page: 2, pageSize: 10 }
+      })
+
+      expect(selectTotalPages(useTenantsStore.getState())).toBe(3)
+      expect(selectHasNextPage(useTenantsStore.getState())).toBe(true)
+      expect(selectHasPrevPage(useTenantsStore.getState())).toBe(true)
+
+      useTenantsStore.setState({ filters: { ...useTenantsStore.getState().filters, page: 3 } })
+      expect(selectHasNextPage(useTenantsStore.getState())).toBe(false)
+
+      useTenantsStore.setState({ filters: { ...useTenantsStore.getState().filters, page: 1 } })
+      expect(selectHasPrevPage(useTenantsStore.getState())).toBe(false)
     })
   })
 
