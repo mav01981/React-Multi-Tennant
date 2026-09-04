@@ -20,6 +20,8 @@ There is no bespoke widget library — MUI supplies the primitives (`Paper`,
 | `ProtectedRoute` / `GuestOnly` | `features/auth/guards/ProtectedRoute.tsx` | Auth layout-route guards | `auth` store (`selectIsAuthenticated`) |
 | `RequirePermission` | `features/roles/PermissionRoute.tsx` | Permission layout-route guard | `roles` store + `useHasPermission` |
 | `AdminOnly` | `features/users/guards/AdminOnly.tsx` | Alias for `RequirePermission('users.read')` | as above |
+| `UserRow` | `features/users/pages/UserRow.tsx` | `React.memo` table row (email, name, roles, status, edit/delete) | none — handlers via `useCallback` in `UsersPage` |
+| `TenantRow` | `features/tenants/pages/TenantRow.tsx` | `React.memo` table row (name, slug, status, suspend/reactivate, delete) | none — handlers via `useCallback` in `TenantsPage` |
 | `useEntityEditorState` | `shared/hooks/useEntityEditor.ts` | Reducer-backed create/edit + delete-dialog state machine for CRUD pages | local (no store) |
 | `useDebouncedValue` | `shared/hooks/useDebouncedValue.ts` | Debounced input primitive (300 ms search) | local |
 | `apiFetch` / `ApiClientError` | `shared/api/client.ts` | Fetch wrapper: bearer token, `X-Tenant-Id`, single-flight 401 refresh + replay | `auth` store via `setAuthHandlers` |

@@ -54,4 +54,5 @@ public record UserListRequest(
     string? Role,
     string? Status,
     string SortBy,
-    string SortDir);
+    string SortDir,
+    string? TenantSlug = null);

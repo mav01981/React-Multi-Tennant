@@ -6,6 +6,7 @@ using Identity.Domain.Entities;
 using Identity.Infrastructure.Identity;
 using Identity.Infrastructure.Persistence;
 using Identity.TestSupport;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Identity.Application.UnitTests;
@@ -32,7 +33,23 @@ public class UseCaseTests : IDisposable
     private UserAdminUseCases NewUsers() => new(
         new UserRepository(_svc.Db),
         new UserAccountService(_svc.Users),
-        new RoleCatalog(_svc.Db));
+        new RoleCatalog(_svc.Db),
+        new TenantRepository(_svc.Db),
+        new PermissionChecker(_svc.Users));
+
+    /// <summary>
+    /// Seeds a PlatformAdmin caller the way the app's bootstrap does — by direct
+    /// role-row insertion, since TenantRoles.AssignAsync rightly refuses to grant
+    /// the reserved PlatformAdmin role through the API path.
+    /// </summary>
+    private async Task<ApplicationUser> NewPlatformAdminAsync(Tenant platform)
+    {
+        var root = await _svc.CreateUserAsync(platform, "root@platform.test");
+        var role = await TenantRoles.FindOrCreateAsync(_svc.Db, platform.Id, "PlatformAdmin");
+        _svc.Db.UserRoles.Add(new IdentityUserRole<Guid> { UserId = root.Id, RoleId = role.Id });
+        await _svc.Db.SaveChangesAsync();
+        return root;
+    }
 
     [Fact]
     public async Task Login_With_Valid_Credentials_Issues_Token_Pair_And_Persists_Family()
@@ -123,7 +140,7 @@ public class UseCaseTests : IDisposable
         var tenant = await _svc.CreateTenantAsync("acme");
         await _svc.CreateUserAsync(tenant, "taken@acme.test");
 
-        var result = await NewUsers().CreateAsync(tenant.Id,
+        var result = await NewUsers().CreateAsync(tenant.Id, Guid.Empty,
             new CreateUserRequest("taken@acme.test", "A", "B", "secret-1", ["Manager"]));
 
         Assert.Equal(409, result.StatusCode);
@@ -135,7 +152,7 @@ public class UseCaseTests : IDisposable
     {
         var tenant = await _svc.CreateTenantAsync("acme");
 
-        var result = await NewUsers().CreateAsync(tenant.Id,
+        var result = await NewUsers().CreateAsync(tenant.Id, Guid.Empty,
             new CreateUserRequest("newbie@acme.test", "New", "Bie", "secret-1", ["Manager"]));
 
         Assert.True(result.IsSuccess);
@@ -148,11 +165,151 @@ public class UseCaseTests : IDisposable
     {
         var tenant = await _svc.CreateTenantAsync("acme");
 
-        var result = await NewUsers().CreateAsync(tenant.Id,
+        var result = await NewUsers().CreateAsync(tenant.Id, Guid.Empty,
             new CreateUserRequest("root@acme.test", "R", "T", "secret-1", ["PlatformAdmin"]));
 
         Assert.Equal(403, result.StatusCode);
         Assert.Equal(ErrorCodes.Forbidden, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Platform_Admin_Can_Create_A_User_In_Another_Tenant()
+    {
+        var platform = await _svc.CreateTenantAsync("platform");
+        var acme = await _svc.CreateTenantAsync("acme");
+        var root = await NewPlatformAdminAsync(platform);
+
+        var result = await NewUsers().CreateAsync(platform.Id, root.Id,
+            new CreateUserRequest("newbie@acme.test", "New", "Bie", "secret-1", ["Manager"], TenantSlug: "acme"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(201, result.StatusCode);
+        var created = await _svc.Db.Users.SingleAsync(u => u.Email == "newbie@acme.test");
+        Assert.Equal(acme.Id, created.TenantId);
+        Assert.Contains("Manager", result.Value!.Roles);
+    }
+
+    [Fact]
+    public async Task Tenant_Admin_Cannot_Create_A_User_In_Another_Tenant()
+    {
+        var acme = await _svc.CreateTenantAsync("acme");
+        var other = await _svc.CreateTenantAsync("other");
+        var admin = await _svc.CreateUserAsync(acme, "admin@acme.test", roles: new[] { "Admin" });
+
+        var result = await NewUsers().CreateAsync(acme.Id, admin.Id,
+            new CreateUserRequest("intruder@other.test", "I", "N", "secret-1", ["Manager"], TenantSlug: other.Slug));
+
+        Assert.Equal(403, result.StatusCode);
+        Assert.Equal(ErrorCodes.Forbidden, result.ErrorCode);
+        Assert.False(await _svc.Db.Users.AnyAsync(u => u.Email == "intruder@other.test"));
+    }
+
+    [Fact]
+    public async Task Create_Into_Unknown_Tenant_Slug_Is_Not_Found()
+    {
+        var platform = await _svc.CreateTenantAsync("platform");
+        var root = await NewPlatformAdminAsync(platform);
+
+        var result = await NewUsers().CreateAsync(platform.Id, root.Id,
+            new CreateUserRequest("ghost@nowhere.test", "G", "H", "secret-1", ["Manager"], TenantSlug: "no-such-workspace"));
+
+        Assert.Equal(404, result.StatusCode);
+        Assert.Equal(ErrorCodes.NotFound, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Create_Into_Suspended_Tenant_Is_Rejected()
+    {
+        var platform = await _svc.CreateTenantAsync("platform");
+        var acme = await _svc.CreateTenantAsync("acme");
+        var root = await NewPlatformAdminAsync(platform);
+        _svc.Db.Tenants.Single(t => t.Id == acme.Id).Status = TenantStatus.Suspended;
+        await _svc.Db.SaveChangesAsync();
+
+        var result = await NewUsers().CreateAsync(platform.Id, root.Id,
+            new CreateUserRequest("suspended@acme.test", "S", "U", "secret-1", ["Manager"], TenantSlug: "acme"));
+
+        Assert.Equal(422, result.StatusCode);
+        Assert.Equal(ErrorCodes.TenantSuspended, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Platform_Admin_Can_List_Another_Tenants_Users()
+    {
+        var platform = await _svc.CreateTenantAsync("platform");
+        var acme = await _svc.CreateTenantAsync("acme");
+        var root = await NewPlatformAdminAsync(platform);
+        await _svc.CreateUserAsync(acme, "alice@acme.test");
+        await _svc.CreateUserAsync(platform, "local@platform.test");
+
+        var result = await NewUsers().ListAsync(platform.Id, root.Id,
+            new UserListRequest(1, 50, null, null, null, "createdAt", "asc", TenantSlug: "acme"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains(result.Value!.Items, i => i.Email == "alice@acme.test");
+        Assert.DoesNotContain(result.Value.Items, i => i.Email == "local@platform.test");
+    }
+
+    [Fact]
+    public async Task Tenant_Admin_Cannot_List_Another_Tenants_Users()
+    {
+        var acme = await _svc.CreateTenantAsync("acme");
+        var other = await _svc.CreateTenantAsync("other");
+        var admin = await _svc.CreateUserAsync(acme, "admin@acme.test", roles: new[] { "Admin" });
+
+        var result = await NewUsers().ListAsync(acme.Id, admin.Id,
+            new UserListRequest(1, 50, null, null, null, "createdAt", "asc", TenantSlug: other.Slug));
+
+        Assert.Equal(403, result.StatusCode);
+        Assert.Equal(ErrorCodes.Forbidden, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Platform_Admin_Can_Delete_Another_Tenants_User()
+    {
+        // Regression: with the Workspace filter showing acme's users to the platform
+        // admin, Delete used to silently no-op (204) because it scoped by the caller's
+        // tenant. It must actually remove the record.
+        var platform = await _svc.CreateTenantAsync("platform");
+        var acme = await _svc.CreateTenantAsync("acme");
+        var root = await NewPlatformAdminAsync(platform);
+        var member = await _svc.CreateUserAsync(acme, "doomed@acme.test");
+
+        var result = await NewUsers().DeleteAsync(platform.Id, root.Id, member.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(await _svc.Db.Users.AnyAsync(u => u.Id == member.Id));
+    }
+
+    [Fact]
+    public async Task Platform_Admin_Can_Update_Another_Tenants_User()
+    {
+        var platform = await _svc.CreateTenantAsync("platform");
+        var acme = await _svc.CreateTenantAsync("acme");
+        var root = await NewPlatformAdminAsync(platform);
+        var member = await _svc.CreateUserAsync(acme, "moved@acme.test");
+
+        var result = await NewUsers().UpdateAsync(platform.Id, root.Id, member.Id,
+            new UpdateUserRequest(FirstName: "Renamed"));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Renamed", (await _svc.Db.Users.SingleAsync(u => u.Id == member.Id)).FirstName);
+    }
+
+    [Fact]
+    public async Task Tenant_Admin_Cannot_Delete_Another_Tenants_User()
+    {
+        var acme = await _svc.CreateTenantAsync("acme");
+        var other = await _svc.CreateTenantAsync("other");
+        var admin = await _svc.CreateUserAsync(acme, "admin@acme.test", roles: new[] { "Admin" });
+        var stranger = await _svc.CreateUserAsync(other, "stranger@other.test");
+
+        // A cross-tenant delete must be an explicit 403 — never a silent 204 no-op.
+        var result = await NewUsers().DeleteAsync(acme.Id, admin.Id, stranger.Id);
+
+        Assert.Equal(403, result.StatusCode);
+        Assert.Equal(ErrorCodes.Forbidden, result.ErrorCode);
+        Assert.True(await _svc.Db.Users.AnyAsync(u => u.Id == stranger.Id));
     }
 
     [Fact]
@@ -161,7 +318,7 @@ public class UseCaseTests : IDisposable
         var tenant = await _svc.CreateTenantAsync("acme");
         var admin = await _svc.CreateUserAsync(tenant, "admin@acme.test", roles: new[] { "Admin" });
 
-        var result = await NewUsers().DeleteAsync(tenant.Id, admin.Id);
+        var result = await NewUsers().DeleteAsync(tenant.Id, admin.Id, admin.Id);
 
         Assert.Equal(409, result.StatusCode);
         Assert.Equal(ErrorCodes.LastActiveAdmin, result.ErrorCode);
@@ -169,16 +326,16 @@ public class UseCaseTests : IDisposable
     }
 
     [Fact]
-    public async Task Delete_A_Non_Admin_User_Soft_Disables_Them()
+    public async Task Delete_A_Non_Admin_User_Removes_The_Record()
     {
         var tenant = await _svc.CreateTenantAsync("acme");
         await _svc.CreateUserAsync(tenant, "admin@acme.test", roles: new[] { "Admin" });
         var member = await _svc.CreateUserAsync(tenant, "member@acme.test");
 
-        var result = await NewUsers().DeleteAsync(tenant.Id, member.Id);
+        var result = await NewUsers().DeleteAsync(tenant.Id, member.Id, member.Id);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(UserStatus.Disabled, (await _svc.Db.Users.SingleAsync(u => u.Id == member.Id)).Status);
+        Assert.False(await _svc.Db.Users.AnyAsync(u => u.Id == member.Id));
     }
 
     [Fact]
@@ -187,7 +344,7 @@ public class UseCaseTests : IDisposable
         var tenant = await _svc.CreateTenantAsync("acme");
         var admin = await _svc.CreateUserAsync(tenant, "admin@acme.test", roles: new[] { "Admin" });
 
-        var result = await NewUsers().UpdateAsync(tenant.Id, admin.Id,
+        var result = await NewUsers().UpdateAsync(tenant.Id, admin.Id, admin.Id,
             new UpdateUserRequest(Roles: ["ReadOnly"]));
 
         Assert.Equal(409, result.StatusCode);
@@ -206,7 +363,7 @@ public class UseCaseTests : IDisposable
         await _svc.Db.SaveChangesAsync();
 
         // Act: attempt to replace PlatformAdmin with an ordinary role.
-        var result = await NewUsers().UpdateAsync(tenant.Id, root.Id,
+        var result = await NewUsers().UpdateAsync(tenant.Id, root.Id, root.Id,
             new UpdateUserRequest(Roles: ["ReadOnly"]));
 
         // Assert: rejected, role intact, account untouched.

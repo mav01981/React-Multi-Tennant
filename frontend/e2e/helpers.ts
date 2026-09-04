@@ -100,10 +100,33 @@ export async function apiCreateUser(
   if (!res.ok) throw new Error(`User create failed (${res.status}): ${await res.text()}`)
 }
 
-/** Picks a Role inside the create/edit user form (the only <select> in that form). */
+/** Picks a Role inside the create/edit user form (label-scoped: the form may also contain a Workspace select). */
 export async function selectRoleInForm(page: Page, form: ReturnType<Page['locator']>, role: string): Promise<void> {
-  await form.getByRole('combobox').click()
+  await form.getByRole('combobox', { name: 'Role' }).click()
   await page.getByRole('option', { name: role, exact: true }).click()
+}
+
+/**
+ * Picks a Workspace inside the platform-admin create-user form (the Workspace
+ * select only renders for callers holding `tenants.read`). Options are labelled
+ * `DisplayName (slug)`, so the slug is matched as a substring.
+ */
+export async function selectWorkspaceInForm(
+  page: Page,
+  form: ReturnType<Page['locator']>,
+  slug: string
+): Promise<void> {
+  await form.getByRole('combobox', { name: 'Workspace' }).click()
+  await page.getByRole('option', { name: new RegExp(slug) }).click()
+}
+
+/**
+ * Switches the Users page Workspace filter (PlatformAdmin only) to the given
+ * workspace slug. Option labels are `DisplayName (slug)`, so match by substring.
+ */
+export async function filterUsersByWorkspace(page: Page, slug: string): Promise<void> {
+  await page.getByLabel('Workspace', { exact: true }).click()
+  await page.getByRole('option', { name: new RegExp(slug) }).click()
 }
 
 export { expect }

@@ -20,6 +20,10 @@ Use React 18 with TypeScript, Vite, and Zustand:
 
 The frontend stays small and feature-oriented with minimal framework overhead. State updates are explicit and selector-based.
 
+## Code Splitting (lazy routes)
+
+Per-route code splitting via `React.lazy(() => import('.../Page'))` wrapped in `Suspense` is a small, low-risk change whenever it becomes worth it. Vite splits each lazy route into its own chunk with no extra bundler configuration. Keep the initial login and landing path eager; introduce lazy boundaries only once route pages grow enough for the split to matter (see `frontend/src/app/App.tsx` and the "Organization Rules" note in `plan.md`).
+
 ## Alternatives considered
 
 - Vue 3 + Pinia: consistent with the original specification wording, but the implemented client and package manifest are React-based.

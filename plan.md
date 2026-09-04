@@ -508,9 +508,26 @@ src/
   barrel files until they solve a demonstrated import-cycle or public-API need.
 - Keep route pages thin: data fetching and mutations belong to the feature API
   or store, while page components compose feature components.
-- Use `React.lazy` at route boundaries when the application gains enough pages
-  for code splitting to matter; do not introduce lazy loading for the initial
-  login and landing path prematurely.
+- Use per-route `React.lazy(() => import('.../Page'))` under `Suspense` when the
+  application gains enough pages for code splitting to matter; it is a small,
+  low-risk change each time. Do not introduce lazy loading for the initial
+  login and landing path prematurely (keep that chunk eager). Budgets and the
+  full policy live in ADR-0006.
+- Table rows are extracted components wrapped in `React.memo` (`UserRow`,
+  `TenantRow`), so every handler prop passed to a row must be referentially
+  stable: define it with `useCallback` in the page (keyed by store actions,
+  never by row data — the row entity is the argument, not a closure capture).
+  Memoized-row handlers depend on the editor/dispatch actions from
+  `useEntityEditorState`, which are themselves `useCallback`-stable against
+  `dispatch`. Adding a new row action without `useCallback` silently defeats
+  the memo (re-renders all rows on every keystroke); do both together. The
+  when-to-memoize bar and the bundle budgets live in ADR-0006.
+- `ThemeProvider` declares `Inter` first in `fontFamily`, but `Inter` is never
+  loaded (no `index.html` font `<link>`, no self-hosted font file). It silently
+  falls back to Roboto/system sans-serif — which currently costs zero extra
+  network requests and avoids FOUT/CLS. When Inter is actually wired in, ship
+  it with `font-display: swap` (or preload a self-hosted `woff2`) so that the
+  performance win isn't traded for a real CLS regression.
 
 ### Migration From The Current Tree
 
@@ -669,7 +686,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 | `AuthController` / auth service | verify credentials, lockout branch, token pair minting |
 | `RefreshTokenService` | rotate on success; **revoke whole family** on reuse |
 | `LogoutService` | always revoke + idempotent (204 on repeat) |
-| `UserService` | password hashing, email-uniqueness conflict, soft-delete |
+| `UserService` | password hashing, email-uniqueness conflict, delete = hard remove (last-active-admin guarded) |
 
 **Contract tests (`WebApplicationFactory` + `TestClient`)**
 

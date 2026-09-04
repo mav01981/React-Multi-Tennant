@@ -37,12 +37,12 @@ $updated = Invoke-RestMethod -Uri "$base/users/$($created.id)" -Method Put -Head
 if ($updated.firstName -ne 'Updated' -or $updated.roles -notcontains 'Manager') { throw 'User update contract failed.' }
 Write-Output '    -> 200, profile and role updated'
 
-Write-Output '[4] DELETE /users/{id} (soft delete)'
+Write-Output '[4] DELETE /users/{id} (hard delete)'
 $deleted = Send-Api "/users/$($created.id)" 'DELETE' $null $headers
 if ($deleted.Status -ne 204) { throw "Expected 204, got $($deleted.Status)." }
-$disabled = Invoke-RestMethod -Uri "$base/users/$($created.id)" -Headers $headers
-if ($disabled.status -ne 'disabled') { throw 'Delete was not a soft delete.' }
-Write-Output '    -> 204, status=disabled'
+$gone = Send-Api "/users/$($created.id)" 'GET' $null $headers
+if ($gone.Status -ne 404) { throw "Expected deleted user to be gone (404), got $($gone.Status)." }
+Write-Output '    -> 204; user record removed (GET -> 404)'
 
 Write-Output '[5] DELETE sole active admin (guardrail)'
 $adminId = $list.items | Where-Object { $_.email -eq 'admin@example.com' } | Select-Object -First 1 -ExpandProperty id

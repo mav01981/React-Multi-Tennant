@@ -14,13 +14,51 @@ namespace Identity.Application.UseCases;
 public sealed class UserAdminUseCases(
     IUserRepository users,
     IUserAccountService accounts,
-    IRoleCatalog roles)
+    IRoleCatalog roles,
+    ITenantRepository tenants,
+    IPermissionChecker permissions)
 {
-    /// <summary>List users with pagination and filtering (scoped to the caller's tenant).</summary>
-    public async Task<UseCaseResult<UserListResponse>> ListAsync(Guid tenantId, UserListRequest request)
+    /// <summary>
+    /// Resolves the workspace a user-admin operation should act on: the caller's own
+    /// tenant by default, or the tenant named by <paramref name="tenantSlug"/> — which
+    /// only a caller holding <see cref="Permissions.TenantsRead"/> (i.e. PlatformAdmin,
+    /// the sole role granted it) may do, and only for an existing, non-deleted, active
+    /// workspace. Returns the target tenant id, or the failure to propagate.
+    /// </summary>
+    private async Task<(Guid? TenantId, (int StatusCode, string ErrorCode, string ErrorMessage)? Error)>
+        ResolveTargetTenantAsync(Guid callerTenantId, Guid callerUserId, string? tenantSlug)
+    {
+        if (string.IsNullOrWhiteSpace(tenantSlug))
+            return (callerTenantId, null);
+
+        var slug = tenantSlug.Trim().ToLowerInvariant();
+        var callerTenant = await tenants.FindByIdAsync(callerTenantId);
+        if (callerTenant is not null && callerTenant.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase))
+            return (callerTenantId, null); // Redundant own-tenant slug — no elevation needed.
+
+        if (!await permissions.HasPermissionAsync(callerUserId, Permissions.TenantsRead))
+            return (null, (403, ErrorCodes.Forbidden, "Only the platform administrator can work with another workspace's users."));
+
+        var target = await tenants.FindBySlugAsync(slug);
+        if (target is null || target.DeletedAt is not null)
+            return (null, (404, ErrorCodes.NotFound, "Workspace not found."));
+        if (target.Status == TenantStatus.Suspended)
+            return (null, (422, ErrorCodes.TenantSuspended, "Cannot work with a suspended workspace."));
+
+        return (target.Id, null);
+    }
+
+    /// <summary>List users with pagination and filtering (scoped to the caller's tenant,
+    /// or to a PlatformAdmin-selected workspace via <see cref="UserListRequest.TenantSlug"/>).</summary>
+    public async Task<UseCaseResult<UserListResponse>> ListAsync(Guid callerTenantId, Guid callerUserId, UserListRequest request)
     {
         var page = Math.Max(1, request.Page);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
+
+        var targetTenant = await ResolveTargetTenantAsync(callerTenantId, callerUserId, request.TenantSlug);
+        if (targetTenant.Error is not null)
+            return UseCaseResult<UserListResponse>.Fail(targetTenant.Error.Value.StatusCode, targetTenant.Error.Value.ErrorCode, targetTenant.Error.Value.ErrorMessage);
+        var tenantId = targetTenant.TenantId!.Value;
 
         var (items, totalCount) = await users.ListAsync(new UserListQuery(
             tenantId, page, pageSize, request.Search, request.Role, request.Status,
@@ -48,7 +86,14 @@ public sealed class UserAdminUseCases(
         return UseCaseResult<UserDto>.Ok(UserDto.From(user, roles));
     }
 
-    public async Task<UseCaseResult<UserDto>> CreateAsync(Guid tenantId, CreateUserRequest request)
+    /// <summary>
+    /// Creates a user. By default the user lands in the caller's own tenant. A
+    /// PlatformAdmin (the only role granted <see cref="Permissions.TenantsRead"/>)
+    /// may additionally pass <paramref name="request.TenantSlug"/> to create the
+    /// user in any existing, non-deleted, active workspace; the roles are resolved
+    /// against that target tenant's catalog.
+    /// </summary>
+    public async Task<UseCaseResult<UserDto>> CreateAsync(Guid callerTenantId, Guid callerUserId, CreateUserRequest request)
     {
         // Validate
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.FirstName) ||
@@ -57,8 +102,14 @@ public sealed class UserAdminUseCases(
         if (request.Roles.Contains(Permissions.PlatformAdminRole, StringComparer.OrdinalIgnoreCase))
             return UseCaseResult<UserDto>.Fail(403, ErrorCodes.Forbidden, "The platform admin role cannot be assigned.");
 
-        // Email uniqueness is scoped to the caller's tenant.
-        if (await users.FindInTenantByEmailAsync(tenantId, request.Email) is not null)
+        // Resolve the target workspace: the caller's own, unless a TenantSlug is given.
+        var targetTenant = await ResolveTargetTenantAsync(callerTenantId, callerUserId, request.TenantSlug);
+        if (targetTenant.Error is not null)
+            return UseCaseResult<UserDto>.Fail(targetTenant.Error.Value.StatusCode, targetTenant.Error.Value.ErrorCode, targetTenant.Error.Value.ErrorMessage);
+        var targetTenantId = targetTenant.TenantId!.Value;
+
+        // Email uniqueness is scoped to the target tenant.
+        if (await users.FindInTenantByEmailAsync(targetTenantId, request.Email) is not null)
             return UseCaseResult<UserDto>.Fail(409, ErrorCodes.EmailExists, "A user with this email already exists in this workspace.");
 
         // Create user
@@ -70,7 +121,7 @@ public sealed class UserAdminUseCases(
             LastName = request.LastName,
             EmailConfirmed = true,
             Status = UserStatus.Active,
-            TenantId = tenantId
+            TenantId = targetTenantId
         };
 
         var result = await accounts.CreateWithPasswordAsync(user, request.Password);
@@ -80,7 +131,7 @@ public sealed class UserAdminUseCases(
             return UseCaseResult<UserDto>.Fail(400, ErrorCodes.ValidationFailed, message);
         }
 
-        // Assign roles within the user's own tenant
+        // Assign roles within the user's own (target) tenant
         if (request.Roles.Length > 0)
         {
             var roleResult = await roles.AssignAsync(user, request.Roles.Distinct());
@@ -95,11 +146,45 @@ public sealed class UserAdminUseCases(
         return UseCaseResult<UserDto>.Ok(UserDto.From(user, assignedRoles), 201);
     }
 
-    public async Task<UseCaseResult<UserDto>> UpdateAsync(Guid tenantId, Guid userId, UpdateUserRequest request)
+    /// <summary>
+    /// Authorizes acting on a user record that may belong to a different workspace
+    /// than the caller's. This is what backs the PlatformAdmin Workspace filter: rows
+    /// listed from another tenant must be update- and delete-able by the same caller.
+    /// Only holders of <see cref="Permissions.TenantsRead"/> (i.e. PlatformAdmin) may
+    /// cross workspaces, and only into an existing, non-deleted, active one.
+    /// </summary>
+    private async Task<UseCaseResult<Unit>?> AuthorizeCrossTenantUserAsync(Guid callerTenantId, Guid callerUserId, ApplicationUser user)
+    {
+        if (user.TenantId == callerTenantId)
+            return null; // Own tenant — nothing to elevate.
+
+        if (!await permissions.HasPermissionAsync(callerUserId, Permissions.TenantsRead))
+            return UseCaseResult<Unit>.Fail(403, ErrorCodes.Forbidden, "Only the platform administrator can manage another workspace's users.");
+
+        var tenant = await tenants.FindByIdAsync(user.TenantId);
+        if (tenant is null || tenant.DeletedAt is not null)
+            return UseCaseResult<Unit>.Fail(404, ErrorCodes.NotFound, "Workspace not found.");
+        if (tenant.Status == TenantStatus.Suspended)
+            return UseCaseResult<Unit>.Fail(422, ErrorCodes.TenantSuspended, "Cannot work with a suspended workspace.");
+
+        return null;
+    }
+
+    public async Task<UseCaseResult<UserDto>> UpdateAsync(Guid callerTenantId, Guid callerUserId, Guid userId, UpdateUserRequest request)
     {
         var user = await users.FindByIdAsync(userId);
-        if (user is null || user.TenantId != tenantId)
+        if (user is null)
             return UseCaseResult<UserDto>.Fail(404, ErrorCodes.NotFound, "User not found.");
+
+        var denied = await AuthorizeCrossTenantUserAsync(callerTenantId, callerUserId, user);
+        if (denied is not null)
+            return UseCaseResult<UserDto>.Fail(
+                denied.StatusCode,
+                denied.ErrorCode ?? ErrorCodes.InternalError,
+                denied.ErrorMessage ?? "An unexpected authorization error occurred.");
+
+        // All tenant-scoped work below happens in the user's own workspace.
+        var tenantId = user.TenantId;
 
         var currentRoles = await users.GetRoleNamesAsync(user);
         var requestedStatus = request.Status?.ToLowerInvariant() switch
@@ -181,12 +266,22 @@ public sealed class UserAdminUseCases(
         return admins;
     }
 
-    /// <summary>Delete (soft-delete via status=disabled) a user within their own tenant.</summary>
-    public async Task<UseCaseResult<Unit>> DeleteAsync(Guid tenantId, Guid userId)
+    /// <summary>
+    /// Hard-deletes a user (permanently removes the record). Scoped to the caller's
+    /// own tenant unless the caller holds <see cref="Permissions.TenantsRead"/>
+    /// (PlatformAdmin), who may delete users of any existing active workspace —
+    /// including rows surfaced by the Workspace-filtered list.
+    /// </summary>
+    public async Task<UseCaseResult<Unit>> DeleteAsync(Guid callerTenantId, Guid callerUserId, Guid userId)
     {
         var user = await users.FindByIdAsync(userId);
-        if (user is null || user.TenantId != tenantId)
+        if (user is null)
             return UseCaseResult<Unit>.NoContent(); // Idempotent
+
+        var denied = await AuthorizeCrossTenantUserAsync(callerTenantId, callerUserId, user);
+        if (denied is not null)
+            return denied;
+        var tenantId = user.TenantId;
 
         var roleNames = await users.GetRoleNamesAsync(user);
         if (user.Status == UserStatus.Active &&
@@ -197,11 +292,10 @@ public sealed class UserAdminUseCases(
                 targetUserId: user.Id))
             return UseCaseResult<Unit>.Fail(409, ErrorCodes.LastActiveAdmin, "The last active admin cannot be deleted.");
 
-        user.Status = UserStatus.Disabled;
-        var updateResult = await accounts.UpdateAsync(user);
-        if (!updateResult.Succeeded)
+        var deleteResult = await accounts.DeleteAsync(user);
+        if (!deleteResult.Succeeded)
         {
-            var message = string.Join("; ", updateResult.Errors.Select(e => e.Description));
+            var message = string.Join("; ", deleteResult.Errors.Select(e => e.Description));
             return UseCaseResult<Unit>.Fail(400, ErrorCodes.ValidationFailed, message);
         }
         return UseCaseResult<Unit>.NoContent();

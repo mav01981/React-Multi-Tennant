@@ -44,7 +44,7 @@ beforeEach(() => {
   useTenantsStore.setState({
     items: [],
     totalCount: 0,
-    selectedTenantId: null,
+    selectedId: null,
     filters: { search: '', page: 1, pageSize: 10 },
     isLoading: false,
     error: null
@@ -56,7 +56,7 @@ describe('tenants store – fetchTenants', () => {
     tenantsApiMock.getAll.mockResolvedValue({ items: tenants, totalCount: 2, page: 1, pageSize: 10, totalPages: 1 })
     useTenantsStore.setState({ filters: { ...useTenantsStore.getState().filters, search: 'acme' } })
 
-    await useTenantsStore.getState().fetchTenants()
+    await useTenantsStore.getState().fetchList()
 
     const state = useTenantsStore.getState()
     expect(state.items).toEqual(tenants)
@@ -70,22 +70,31 @@ describe('tenants store – fetchTenants', () => {
   })
 
   describe('tenants store – create / update / delete', () => {
-    it('prepends a newly created tenant and bumps the count', async () => {
+    it('refetches the list after creating a tenant', async () => {
       useTenantsStore.setState({ items: [tenants[0]], totalCount: 1 })
       const created = { ...tenants[1], id: 't3' }
       tenantsApiMock.create.mockResolvedValue(created)
+      tenantsApiMock.getAll.mockResolvedValue({
+        items: [created, tenants[0]],
+        totalCount: 2,
+        page: 1,
+        pageSize: 10,
+        totalPages: 1
+      })
 
-      await useTenantsStore.getState().createTenant({ name: 'Initech', displayName: 'Initech LLC', slug: 'initech' })
+      await useTenantsStore.getState().createItem({ name: 'Initech', displayName: 'Initech LLC', slug: 'initech' })
 
       const state = useTenantsStore.getState()
+      expect(tenantsApiMock.getAll).toHaveBeenCalled()
       expect(state.items[0]).toEqual(created)
       expect(state.totalCount).toBe(2)
+      expect(state.isLoading).toBe(false)
     })
 
     it('re-throws on failed create', async () => {
       tenantsApiMock.create.mockRejectedValue(new Error('dup'))
       await expect(
-        useTenantsStore.getState().createTenant({ name: 'X', displayName: 'X', slug: 'platform' })
+        useTenantsStore.getState().createItem({ name: 'X', displayName: 'X', slug: 'platform' })
       ).rejects.toThrow('dup')
       expect(useTenantsStore.getState().error).toBe('dup')
     })
@@ -95,29 +104,38 @@ describe('tenants store – fetchTenants', () => {
       const updated = { ...tenants[0], status: 'suspended' as const }
       tenantsApiMock.update.mockResolvedValue(updated)
 
-      await useTenantsStore.getState().updateTenant('t1', { status: 'suspended' })
+      await useTenantsStore.getState().updateItem('t1', { status: 'suspended' })
 
       const state = useTenantsStore.getState()
       expect(state.items.find((t) => t.id === 't1')?.status).toBe('suspended')
       expect(state.items[1]).toEqual(tenants[1])
     })
 
-    it('removes a deleted tenant and clears its selection', async () => {
-      useTenantsStore.setState({ items: tenants, totalCount: 2, selectedTenantId: 't1' })
+    it('removes a deleted tenant, clears its selection and refetches', async () => {
+      useTenantsStore.setState({ items: tenants, totalCount: 2, selectedId: 't1' })
       tenantsApiMock.remove.mockResolvedValue(undefined)
+      tenantsApiMock.getAll.mockResolvedValue({
+        items: [tenants[1]],
+        totalCount: 1,
+        page: 1,
+        pageSize: 10,
+        totalPages: 1
+      })
 
-      await useTenantsStore.getState().deleteTenant('t1')
+      await useTenantsStore.getState().deleteItem('t1')
 
       const state = useTenantsStore.getState()
+      expect(tenantsApiMock.getAll).toHaveBeenCalled()
       expect(state.items.map((t) => t.id)).toEqual(['t2'])
       expect(state.totalCount).toBe(1)
-      expect(state.selectedTenantId).toBeNull()
+      expect(state.selectedId).toBeNull()
+      expect(state.isLoading).toBe(false)
     })
 
     it('does not drop the count below zero and re-throws on error', async () => {
       useTenantsStore.setState({ items: tenants, totalCount: 1 })
       tenantsApiMock.remove.mockRejectedValue(new Error('delete failed'))
-      await expect(useTenantsStore.getState().deleteTenant('t1')).rejects.toThrow('delete failed')
+      await expect(useTenantsStore.getState().deleteItem('t1')).rejects.toThrow('delete failed')
       expect(useTenantsStore.getState().error).toBe('delete failed')
     })
   })
@@ -152,9 +170,9 @@ describe('tenants store – fetchTenants', () => {
 
   describe('tenants store selectors', () => {
     it('selectSelectedTenant resolves the selected id to an item', () => {
-      useTenantsStore.setState({ items: tenants, selectedTenantId: 't2' })
+      useTenantsStore.setState({ items: tenants, selectedId: 't2' })
       expect(selectSelectedTenant(useTenantsStore.getState())?.id).toBe('t2')
-      useTenantsStore.setState({ selectedTenantId: null })
+      useTenantsStore.setState({ selectedId: null })
       expect(selectSelectedTenant(useTenantsStore.getState())).toBeNull()
     })
 
@@ -179,7 +197,7 @@ describe('tenants store – fetchTenants', () => {
   it('captures the error message and stops loading on failure', async () => {
     tenantsApiMock.getAll.mockRejectedValue(new Error('boom'))
 
-    await useTenantsStore.getState().fetchTenants()
+    await useTenantsStore.getState().fetchList()
 
     const state = useTenantsStore.getState()
     expect(state.error).toBe('boom')
@@ -204,8 +222,8 @@ describe('tenants store – fetchTenants', () => {
       })
 
     // Start a slow request, then immediately supersede it with a fresh one.
-    const first = useTenantsStore.getState().fetchTenants()
-    const second = useTenantsStore.getState().fetchTenants()
+    const first = useTenantsStore.getState().fetchList()
+    const second = useTenantsStore.getState().fetchList()
     releaseFirst()
     await Promise.all([first, second])
 
@@ -224,8 +242,8 @@ describe('tenants store – fetchTenants', () => {
       .mockReturnValueOnce(stale) // first request: slow, will be superseded
       .mockResolvedValueOnce({ items: [tenants[1]], totalCount: 1, page: 1, pageSize: 10, totalPages: 1 })
 
-    const first = useTenantsStore.getState().fetchTenants()
-    await useTenantsStore.getState().fetchTenants() // second request supersedes the first
+    const first = useTenantsStore.getState().fetchList()
+    await useTenantsStore.getState().fetchList() // second request supersedes the first
 
     // Resolve the stale request AFTER the fresh one committed its data.
     resolveStale({ items: tenants, totalCount: 2, page: 1, pageSize: 10, totalPages: 1 })

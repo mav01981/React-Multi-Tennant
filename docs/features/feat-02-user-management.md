@@ -39,7 +39,9 @@ When an admin edits their **own** roles/status, `updateUser` calls `useAuthStore
 - Owner-only (`Role: Admin`); others → `403 FORBIDDEN`.
 - `GET /users` applies pagination, `search`, `role`, `status`, sort — all per `api-contract.md` §6.
 - `POST /users` validates email uniqueness → `409 EMAIL_EXISTS`; hashes the password.
-- `DELETE /users/{id}` is soft-delete — sets `status=disabled` rather than hard-removing, unless audited policy says otherwise.
+- `DELETE /users/{id}` is a hard delete — the user record is permanently removed (the confirm dialog warns this cannot be undone); the last-active-admin guardrail still applies (`409 LAST_ACTIVE_ADMIN`).
+- `POST /users` accepts an optional `tenantSlug`: only callers holding `tenants.read` (i.e. PlatformAdmin) may use it to create a user in an existing active workspace; roles resolve against the **target** tenant's catalog. Everyone else creates users in their own tenant and cannot escape it.
+- `GET /users` accepts the same optional `tenantSlug` (PlatformAdmin-only, same guards): the platform admin can browse any active workspace's users; the UsersPage shows the Workspace filter only for these callers. `PUT /users/{id}` and `DELETE /users/{id}` follow the same rule — a `tenants.read` holder may update/delete a user of any existing active workspace (a cross-tenant attempt by anyone else is an explicit `403`, never a silent no-op).
 - Guardrails: an admin MUST be able to delete their own account (choose; needs explicit product decision), and should never be able to lock out the last active admin without warning.
 
 ## 5. Store API (frontend target shape — `stores/users.ts`, Zustand)

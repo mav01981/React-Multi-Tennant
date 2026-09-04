@@ -7,7 +7,7 @@
 
 ## 1. Overview
 
-Users log in with email + password, obtain a short-lived access token and a long-lived refresh token, persist the session, and silently re-authenticate on subsequent app mounts. Logout revokes the server-side token family and clears all local state.
+Users log in with email + password, obtain a short-lived access token (kept **in memory**) and a long-lived refresh token (delivered as an **HttpOnly cookie**), and silently re-authenticate on subsequent app mounts. Logout revokes the server-side token family and clears all local state.
 
 ## 2. User Stories
 
@@ -15,7 +15,7 @@ Users log in with email + password, obtain a short-lived access token and a long
 |----|-------|----------------------|
 | AUT-01 | As a user I can log in with valid credentials | Tokens returned, `auth` store hydrated, redirected to landing |
 | AUT-02 | As a user I remain logged in after reload | Silent re-auth via `me` + refresh on mount |
-| AUT-03 | As a user I can log out | Server family revoked, localStorage + store cleared, redirected to login |
+| AUT-03 | As a user I can log out | Server family revoked, refresh cookie + store cleared, redirected to login |
 | AUT-04 | As a user with an expired access token my request still succeeds | Interceptor refreshes once and replays |
 | AUT-05 | As a locked user I cannot log in | `422 ACCOUNT_LOCKED`, no token minted |
 
@@ -23,8 +23,13 @@ Users log in with email + password, obtain a short-lived access token and a long
 
 1. **Login** (`POST /auth/login`) →
    - `authApi.login()` returns `LoginResponse`.
-   - `setSession()` persists `accessToken` + `refreshToken` to localStorage and hydrates `user`.
-2. **App mount hydration** (`main.tsx`): `useAuthStore.getState().accessToken` is seeded from localStorage; if present, call `fetchCurrentUser()` (→ `GET /auth/me`); on 401, refresh; on refresh failure, `clearSession()` — before `createRoot` renders.
+   - `setSession()` keeps `accessToken` **in memory**, hydrates `user`, and persists
+     only the non-secret `tenantSlug` + `hasSession` hint. The rotated refresh token
+     arrives as an `HttpOnly` cookie (never touches JS or localStorage).
+2. **App mount hydration** (`main.tsx`): no access token exists in storage — if the
+   `hasSession` hint is set, `initialize()` exchanges the `HttpOnly` refresh cookie
+   at `POST /auth/refresh` (empty body) to re-derive `user` + a fresh access token;
+   on refresh failure, `clearSession()` — before `createRoot` renders.
 3. **API interceptor (401 handling):**
    - Single-flight refresh (concurrent 401s coalesce).
    - Replay original request with the new token.
@@ -51,14 +56,14 @@ Users log in with email + password, obtain a short-lived access token and a long
 ## 5. Acceptance (E2E happy path)
 
 ```
-[1] POST /auth/login {email,password}            → 200 tokens+user
+[1] POST /auth/login {email,password}            → 200 {accessToken,expiresIn,user} + Set-Cookie refreshToken
 [2] GET  /auth/me        Bearer <accessToken>   → 200 user
 [3] user sleeps until token expires
 [4] GET  /auth/me        Bearer <expired>       → 401
-[5] POST /auth/refresh   {access, refresh}      → 200 (new pair)
+[5] POST /auth/refresh   (no body, cookie)      → 200 (new access token) + rotated cookie
 [6] replay of [4] with new token               → 200 user
-[7] POST /auth/logout    Bearer <new>          → 204
-[8] reuse old refresh                          → 401 REFRESH_TOKEN_REVOKED
+[7] POST /auth/logout    Bearer <new>          → 204 (refresh cookie deleted)
+[8] reuse old refresh (cookie)                 → 401 REFRESH_TOKEN_REVOKED
 ```
 
 ## 6. Edge Cases

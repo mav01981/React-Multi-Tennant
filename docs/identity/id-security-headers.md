@@ -32,7 +32,7 @@ Content-Security-Policy:
   form-action 'self'
 ```
 
-**Why CSP matters for auth:** localStorage holds the access token (see `auth-flow.md` §7). CSP is a primary mitigation against XSS exfiltrating that token.
+**Why CSP matters for auth:** the access token is held **in memory only** (never localStorage; see `auth-flow.md` §7). CSP is a primary mitigation against XSS reading it out of module state.
 
 ### Development vs production
 - **Dev:** allow relaxed `script-src 'self' 'unsafe-eval'` for hot-reload / dev toasts, disabled only locally.
@@ -43,7 +43,7 @@ Content-Security-Policy:
 | Rule | Value |
 |------|-------|
 | `Access-Control-Allow-Origin` | reflect configured origin(s), **never** `*` on authenticated routes |
-| `Access-Control-Allow-Credentials` | not required (tokens are body, not cookies) |
+| `Access-Control-Allow-Credentials` | `true` — required because the refresh token is carried as an `HttpOnly` cookie (`credentials: 'include'`) |
 | `Access-Control-Allow-Methods` | `GET, POST, PUT, DELETE, OPTIONS` |
 | `Access-Control-Allow-Headers` | `Authorization, Content-Type, X-Request-Id` |
 | `Access-Control-Max-Age` | `86400` (preflight cache) |

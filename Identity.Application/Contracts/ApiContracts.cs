@@ -62,7 +62,7 @@ public record ApiError(string Code, string Message, IReadOnlyList<ApiErrorDetail
 public record ApiErrorDetail(string Field, string Message);
 
 // User Management (Admin)
-public record CreateUserRequest(string Email, string FirstName, string LastName, string Password, string[] Roles);
+public record CreateUserRequest(string Email, string FirstName, string LastName, string Password, string[] Roles, string? TenantSlug = null);
 
 public record UpdateUserRequest(string? Email = null, string? FirstName = null, string? LastName = null, string? Status = null, string[]? Roles = null);
 

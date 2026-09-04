@@ -56,8 +56,8 @@ beforeEach(() => {
   useUsersStore.setState({
     items: [],
     totalCount: 0,
-    selectedUserId: null,
-    filters: { search: '', role: null, status: 'all', page: 1, pageSize: 10 },
+    selectedId: null,
+    filters: { search: '', role: null, status: 'all', tenantSlug: null, page: 1, pageSize: 10 },
     isLoading: false,
     error: null
   })
@@ -69,7 +69,7 @@ describe('users store – fetchUsers', () => {
       filters: { ...useUsersStore.getState().filters, search: 'ann', status: 'active', page: 1 }
     })
 
-    await useUsersStore.getState().fetchUsers()
+    await useUsersStore.getState().fetchList()
 
     const state = useUsersStore.getState()
     expect(state.items).toEqual(users)
@@ -86,7 +86,7 @@ describe('users store – fetchUsers', () => {
   it('captures the error message and stops loading on failure', async () => {
     usersApiMock.getAll.mockRejectedValue(new Error('boom'))
 
-    await useUsersStore.getState().fetchUsers()
+    await useUsersStore.getState().fetchList()
 
     const state = useUsersStore.getState()
     expect(state.error).toBe('boom')
@@ -111,8 +111,8 @@ describe('users store – fetchUsers', () => {
       })
 
     // Start a slow request, then immediately supersede it with a fresh one.
-    const first = useUsersStore.getState().fetchUsers()
-    const second = useUsersStore.getState().fetchUsers()
+    const first = useUsersStore.getState().fetchList()
+    const second = useUsersStore.getState().fetchList()
     releaseFirst()
     await Promise.all([first, second])
 
@@ -131,8 +131,8 @@ describe('users store – fetchUsers', () => {
       .mockReturnValueOnce(stale) // first request: slow, will be superseded
       .mockResolvedValueOnce({ items: [users[1]], totalCount: 1, page: 1, pageSize: 10, totalPages: 1 })
 
-    const first = useUsersStore.getState().fetchUsers()
-    await useUsersStore.getState().fetchUsers() // second request supersedes the first
+    const first = useUsersStore.getState().fetchList()
+    await useUsersStore.getState().fetchList() // second request supersedes the first
 
     // Resolve the stale request AFTER the fresh one committed its data.
     resolveStale({ items: users, totalCount: 2, page: 1, pageSize: 10, totalPages: 1 })
@@ -147,12 +147,19 @@ describe('users store – fetchUsers', () => {
 })
 
 describe('users store – create / update / delete', () => {
-  it('prepends a newly created user and bumps the count', async () => {
+  it('refetches the list after creating a user', async () => {
     useUsersStore.setState({ items: [users[0]], totalCount: 1 })
     const created = { ...users[1], id: 'u3' }
     usersApiMock.create.mockResolvedValue(created)
+    usersApiMock.getAll.mockResolvedValue({
+      items: [created, users[0]],
+      totalCount: 2,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1
+    })
 
-    await useUsersStore.getState().createUser({
+    await useUsersStore.getState().createItem({
       email: created.email,
       firstName: created.firstName,
       lastName: created.lastName,
@@ -161,14 +168,16 @@ describe('users store – create / update / delete', () => {
     })
 
     const state = useUsersStore.getState()
+    expect(usersApiMock.getAll).toHaveBeenCalled()
     expect(state.items[0]).toEqual(created)
     expect(state.totalCount).toBe(2)
+    expect(state.isLoading).toBe(false)
   })
 
   it('re-throws and records errors when creation fails', async () => {
     usersApiMock.create.mockRejectedValue(new Error('create failed'))
     await expect(
-      useUsersStore.getState().createUser({ email: 'a', firstName: 'a', lastName: 'b', password: 'x', roles: [] })
+      useUsersStore.getState().createItem({ email: 'a', firstName: 'a', lastName: 'b', password: 'x', roles: [] })
     ).rejects.toThrow('create failed')
     expect(useUsersStore.getState().error).toBe('create failed')
   })
@@ -178,29 +187,32 @@ describe('users store – create / update / delete', () => {
     const updated = { ...users[0], firstName: 'Anne' }
     usersApiMock.update.mockResolvedValue(updated)
 
-    await useUsersStore.getState().updateUser('u1', { firstName: 'Anne' })
+    await useUsersStore.getState().updateItem('u1', { firstName: 'Anne' })
 
     const state = useUsersStore.getState()
     expect(state.items.find((u) => u.id === 'u1')?.firstName).toBe('Anne')
     expect(state.items[1]).toEqual(users[1])
   })
 
-  it('removes a deleted user and clears its selection', async () => {
-    useUsersStore.setState({ items: users, totalCount: 2, selectedUserId: 'u1' })
+  it('removes a deleted user, clears its selection and refetches', async () => {
+    useUsersStore.setState({ items: users, totalCount: 2, selectedId: 'u1' })
     usersApiMock.delete.mockResolvedValue(undefined)
+    usersApiMock.getAll.mockResolvedValue({ items: [users[1]], totalCount: 1, page: 1, pageSize: 10, totalPages: 1 })
 
-    await useUsersStore.getState().deleteUser('u1')
+    await useUsersStore.getState().deleteItem('u1')
 
     const state = useUsersStore.getState()
+    expect(usersApiMock.getAll).toHaveBeenCalled()
     expect(state.items.map((u) => u.id)).toEqual(['u2'])
     expect(state.totalCount).toBe(1)
-    expect(state.selectedUserId).toBeNull()
+    expect(state.selectedId).toBeNull()
+    expect(state.isLoading).toBe(false)
   })
 
   it('does not drop the count below zero and re-throws on error', async () => {
     useUsersStore.setState({ items: users, totalCount: 1 })
     usersApiMock.delete.mockRejectedValue(new Error('delete failed'))
-    await expect(useUsersStore.getState().deleteUser('u1')).rejects.toThrow('delete failed')
+    await expect(useUsersStore.getState().deleteItem('u1')).rejects.toThrow('delete failed')
     expect(useUsersStore.getState().error).toBe('delete failed')
   })
 })
@@ -236,9 +248,9 @@ describe('users store – filters & pagination', () => {
 
 describe('users store selectors', () => {
   it('selectSelectedUser resolves the selected id to an item', () => {
-    useUsersStore.setState({ items: users, selectedUserId: 'u2' })
+    useUsersStore.setState({ items: users, selectedId: 'u2' })
     expect(selectSelectedUser(useUsersStore.getState())?.id).toBe('u2')
-    useUsersStore.setState({ selectedUserId: null })
+    useUsersStore.setState({ selectedId: null })
     expect(selectSelectedUser(useUsersStore.getState())).toBeNull()
   })
 

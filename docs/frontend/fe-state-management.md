@@ -25,17 +25,19 @@ imperatively via `useStore.getState()` (see §7).
 
 | Store | Owns | Persistence |
 |-------|------|-------------|
-| `auth` | `user`, tokens, `tenantSlug`, boot state | localStorage (tokens + tenant slug) |
+| `auth` | `user`, in-memory access token, `tenantSlug`, boot state | localStorage (`tenantSlug` + `hasSession` hint only) |
 | `users` | admin user list, filters, pagination | none (API cache + abort guard) |
 | `tenants` | tenant list, filters, pagination | none (API cache + abort guard) |
 | `roles` | role catalog + permission cache | none (static, fail closed) |
 | `ui` | theme mode, toasts | localStorage (`themeMode`) |
 
-## 2. `auth` Store — Identity, Tokens, Login State
+## 2. `auth` Store — Identity, Session, Login State
 
-**State:** `user: UserDto | null`, `accessToken`, `refreshToken`, `tenantSlug`,
-`isLoading`, `error`, `isInitialized` (tokens + tenant slug seeded from
-localStorage at module init).
+**State:** `user: UserDto | null`, `accessToken`, `tenantSlug`,
+`isLoading`, `error`, `isInitialized`. The access token is **in-memory only**
+(never persisted). At module init only `tenantSlug` and a `hasSession` hint are
+seeded from localStorage — non-secret values that let boot decide whether to
+attempt a cookie-based re-auth instead of a pointless refresh round-trip.
 
 **Selectors (exported pure functions):** `selectIsAuthenticated`,
 `selectIsAdmin`, `selectIsManager`, `selectFullName`, `selectInitials`.
@@ -46,21 +48,25 @@ localStorage at module init).
 
 ```ts
 function setSession(set, response: LoginResponse, tenantSlug?: string): void {
-  set({ accessToken: response.accessToken, refreshToken: response.refreshToken,
-        user: response.user, ...(tenantSlug !== undefined ? { tenantSlug } : {}) })
-  localStorage.setItem('accessToken', response.accessToken)
-  localStorage.setItem('refreshToken', response.refreshToken)
+  // Access token lives in memory only; the refresh token was delivered by the
+  // server as an HttpOnly cookie — it never reaches this code.
+  set({ accessToken: response.accessToken, user: response.user,
+        ...(tenantSlug !== undefined ? { tenantSlug } : {}) })
+  localStorage.setItem('hasSession', '1')
   if (tenantSlug !== undefined) localStorage.setItem('tenantSlug', tenantSlug)
 }
 
 function clearSession(set): void {
-  set({ user: null, accessToken: null, refreshToken: null })
-  localStorage.removeItem('accessToken'); localStorage.removeItem('refreshToken')
+  set({ user: null, accessToken: null })
+  localStorage.removeItem('hasSession')
 }
 ```
 
 **Rules:**
-- Token persistence is localStorage-backed (matches `contracts/auth-flow.md` §2).
+- Only **non-secret** values persist to localStorage: `tenantSlug` and a
+  `hasSession` hint. The access token stays in memory (matches
+  `contracts/auth-flow.md`); the refresh token is an `HttpOnly` cookie the store
+  never sees.
 - `login()` passes the attempted `tenantSlug` into `setSession`, so the workspace
   slug is persisted **only on success** — a failed login never leaks it into
   state or storage. The slug travels to the API as an explicit `X-Tenant-Id`
@@ -70,8 +76,10 @@ function clearSession(set): void {
   errors propagate untouched.
 - Token refresh lives **only** in the API client's silent-refresh interceptor
   (`shared/api/client.ts` → `doRefresh`/`refreshOnce`); there is deliberately no
-  store-level `refreshAccessToken()` action. The interceptor reads tokens via
-  the `setAuthHandlers` callbacks and writes rotated tokens back through
+  store-level `refreshAccessToken()` action. The interceptor is cookie-aware: it
+  posts an empty body to `/auth/refresh` with `credentials:'include'` (the
+  HttpOnly refresh cookie rides along), reads the access token via the
+  `setAuthHandlers` callbacks, and writes rotated tokens back through
   `onSessionUpdated`; clearing the session on a failed *silent* refresh is its
   job (`doRefresh` → `onSessionCleared`).
 - `setUser(user | null)` is the single entry point for swapping the identity, so
@@ -83,12 +91,14 @@ function clearSession(set): void {
 ### Client-handler registration
 
 At module load the store registers itself with `setAuthHandlers()` so the API
-client can read/rotate tokens without importing the store (no circular import):
+client can read the access token / rotate the session without importing the store
+(no circular import):
 
 ```ts
 setAuthHandlers({
-  getTokens, getTenantSlug,
-  onSessionUpdated: (tokens) => useAuthStore.setState({ ...tokens }),
+  getAccessToken: () => useAuthStore.getState().accessToken,
+  getTenantSlug: () => useAuthStore.getState().tenantSlug,
+  onSessionUpdated: (accessToken) => useAuthStore.setState({ accessToken }),
   onSessionCleared: () => clearSession(useAuthStore.setState.bind(useAuthStore))
 })
 ```
@@ -269,7 +279,7 @@ bootstrap always reaches the login screen.
 
 | Feature | Store needed? |
 |---------|---------------|
-| Login/logout | ✅ `auth` — tokens persist across routes |
+| Login/logout | ✅ `auth` — session (in-memory access token + `hasSession` hint) persists across routes |
 | Current user | ✅ `auth` — navbar, guards, views |
 | User list (admin) | ✅ `users` — pagination + filters + abort guard |
 | Tenant list (platform admin) | ✅ `tenants` — same conventions as `users` |

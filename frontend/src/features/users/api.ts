@@ -17,6 +17,8 @@ export interface UsersListParams {
   status?: 'all' | 'active' | 'locked' | 'disabled'
   sortBy?: string
   sortDir?: 'asc' | 'desc'
+  /** PlatformAdmin only: list another workspace's users. */
+  tenantSlug?: string
 }
 
 export const usersApi = {
@@ -29,6 +31,7 @@ export const usersApi = {
     if (params.status && params.status !== 'all') query.set('status', params.status)
     if (params.sortBy) query.set('sortBy', params.sortBy)
     if (params.sortDir) query.set('sortDir', params.sortDir)
+    if (params.tenantSlug) query.set('tenantSlug', params.tenantSlug)
 
     const queryStr = query.toString()
     const path = queryStr ? `/users?${queryStr}` : '/users'

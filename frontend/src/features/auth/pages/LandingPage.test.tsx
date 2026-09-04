@@ -26,7 +26,10 @@ vi.mock('../auth.store', () => ({
 // Controlled permission map per test.
 let permissions: string[] = []
 vi.mock('@/features/roles/roles.store', () => ({
-  useHasPermission: (permission: string) => permissions.includes(permission)
+  useHasPermission: (permission: string) => permissions.includes(permission),
+  // Catalog treated as already loaded so the landing page's fetch effect is a no-op.
+  useRolesStore: (selector: (s: { hasLoaded: boolean; fetchRoles: () => void }) => unknown) =>
+    selector({ hasLoaded: true, fetchRoles: vi.fn() })
 }))
 
 function renderLanding(): void {

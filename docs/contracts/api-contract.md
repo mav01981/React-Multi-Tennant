@@ -43,7 +43,7 @@
 | `Retry-After` | On `429 Too Many Requests` | `Retry-After: 45` |
 | `WWW-Authenticate` | On `401 Unauthorized` | `Bearer realm="api", error="invalid_token"` |
 
-> **Tokens are NEVER transported in response headers or cookies.** They are body-only DTO fields — see `auth-flow.md`.
+> **Token transport:** the **access token** is body-only and, on the client, kept **in memory only** (never localStorage); the **refresh token** is delivered as an **`HttpOnly` cookie**, never in a JSON body. See `auth-flow.md`.
 
 ---
 
@@ -96,7 +96,7 @@ All non-2xx responses use a single shape:
 |--------|------|------|---------------------|
 | `POST` | `/api/v1/auth/register` | Public | `RegisterRequest` → `201 LoginResponse` (+ `Location`) |
 | `POST` | `/api/v1/auth/login` | Public | `LoginRequest` → `LoginResponse` |
-| `POST` | `/api/v1/auth/refresh` | Public (valid refresh required) | `RefreshRequest` → `LoginResponse` |
+| `POST` | `/api/v1/auth/refresh` | Public (valid refresh cookie required) | no body (`credentials: 'include'`) → `LoginResponse` |
 | `POST` | `/api/v1/auth/logout` | Bearer | — → `204 No Content` |
 | `GET`  | `/api/v1/auth/me` | Bearer | — → `UserDto` |
 
@@ -106,9 +106,9 @@ All non-2xx responses use a single shape:
 |--------|------|------|---------------------|
 | `GET`  | `/api/v1/users` | Bearer (Admin) | query → `UserListResponse` |
 | `GET`  | `/api/v1/users/{id}` | Bearer (Admin) | — → `UserDto` |
-| `POST` | `/api/v1/users` | Bearer (Admin) | `CreateUserRequest` → `UserDto` |
+| `POST` | `/api/v1/users` | Bearer (Admin) | `CreateUserRequest` → `UserDto` (201). Optional `tenantSlug` — accepted **only** from a caller holding `tenants.read` (PlatformAdmin); creates the user in that workspace instead of the caller's own (unknown/deleted slug → `404`, suspended → `422 TENANT_SUSPENDED`) |
 | `PUT`  | `/api/v1/users/{id}` | Bearer (Admin) | `UpdateUserRequest` → `UserDto` |
-| `DELETE` | `/api/v1/users/{id}` | Bearer (Admin) | — → `204 No Content` |
+| `DELETE` | `/api/v1/users/{id}` | Bearer (Admin) | — → `204 No Content` (hard delete: the record is permanently removed; re-deleting is idempotent `204`) |
 
 ### 4.3 Profile Self-Service
 
@@ -136,13 +136,15 @@ All non-2xx responses use a single shape:
 // LoginRequest
 { "email": "string", "password": "string" }
 
-// RefreshRequest
+// RefreshRequest — optional body fallback for NON-BROWSER clients only.
+// Browsers authenticate POST /auth/refresh purely via the HttpOnly `refreshToken`
+// cookie (empty body, credentials: 'include'); the cookie wins when present.
 { "accessToken": "string", "refreshToken": "string" }
 
-// LoginResponse
+// LoginResponse (JSON body only — the rotated refresh token never appears here;
+// it is delivered as an HttpOnly cookie). Access token is kept in memory only.
 {
   "accessToken": "string",   // short-lived JWT (15 min)
-  "refreshToken": "string",  // long-lived, rotated on refresh
   "expiresIn": 900,          // seconds until accessToken expiry
   "user": { /* UserDto */ }
 }
@@ -209,6 +211,7 @@ All non-2xx responses use a single shape:
 | `status` | optional; `all` (default) \| `active` \| `locked` |
 | `sortBy` | optional; whitelisted field, default `createdAt` |
 | `sortDir` | `asc` \| `desc`, default `desc` |
+| `tenantSlug` | `GET /users` only; optional. Lists that workspace's users instead of the caller's own — accepted **only** from a caller holding `tenants.read` (PlatformAdmin); otherwise `403` (unknown/deleted slug → `404`, suspended → `422 TENANT_SUSPENDED`) |
 
 **Clipping rules:** server clamps `pageSize` to `[1,100]` and `page` to `[1,∞)`. Out-of-range `page` returns empty `items` but valid `totalCount`.
 

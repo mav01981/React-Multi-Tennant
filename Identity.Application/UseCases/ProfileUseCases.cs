@@ -14,7 +14,7 @@ public sealed class ProfileUseCases(IUserRepository users, IUserAccountService a
     {
         if (caller.IsEmpty)
             return UseCaseResult<UserDto>.Fail(401, ErrorCodes.Unauthenticated, "Invalid token subject.");
-        
+
         if (caller.TenantId == Guid.Empty)
             return UseCaseResult<UserDto>.Fail(401, ErrorCodes.Unauthenticated, "Invalid token tenant.");
 
@@ -45,7 +45,7 @@ public sealed class ProfileUseCases(IUserRepository users, IUserAccountService a
             user.LastName = request.LastName.Trim();
 
         var result = await accounts.UpdateAsync(user);
-        
+
         if (!result.Succeeded)
             return UseCaseResult<UserDto>.Fail(400, ErrorCodes.ValidationFailed,
                 string.Join("; ", result.Errors.Select(e => e.Description)));

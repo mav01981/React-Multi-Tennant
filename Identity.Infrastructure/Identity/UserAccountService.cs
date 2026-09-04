@@ -36,6 +36,10 @@ public sealed class UserAccountService(UserManager<ApplicationUser> users) : IUs
     public async Task<IdentityResult> UpdateAsync(ApplicationUser user, CancellationToken ct = default) =>
         await users.UpdateAsync(user);
 
+    /// <summary>Permanently removes the user (hard delete) via Identity's store.</summary>
+    public Task<IdentityResult> DeleteAsync(ApplicationUser user, CancellationToken ct = default) =>
+        users.DeleteAsync(user);
+
     public async Task<IdentityResult> ChangePasswordAsync(ApplicationUser user, string currentPassword, string newPassword, CancellationToken ct = default) =>
         await users.ChangePasswordAsync(user, currentPassword, newPassword);
 }

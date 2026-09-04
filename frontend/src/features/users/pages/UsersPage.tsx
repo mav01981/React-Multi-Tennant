@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -6,21 +6,19 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
-import Chip from '@mui/material/Chip'
-import IconButton from '@mui/material/IconButton'
 import MenuItem from '@mui/material/MenuItem'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material'
-import EditIcon from '@mui/icons-material/Edit'
-import DeleteIcon from '@mui/icons-material/Delete'
 import { useShallow } from 'zustand/react/shallow'
 import { useUsersStore } from '../users.store'
 import type { CreateUserRequest, UpdateUserRequest } from '../users.types'
+import { UserRow } from './UserRow'
 import { useUiStore } from '@/shared/ui/ui.store'
 import { useRolesStore, useHasPermission } from '@/features/roles/roles.store'
+import { useTenantsStore } from '@/features/tenants/tenants.store'
 import type { RoleName } from '@/features/roles/permissions'
 import { useEntityEditorState } from '@/shared/hooks/useEntityEditor'
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue'
@@ -43,16 +41,23 @@ export function UsersPage(): React.JSX.Element {
       filters: s.filters
     }))
   )
-  const { fetchUsers, setPage, setSearch, setRole, setStatus, createUser, updateUser, deleteUser } = useUsersStore(
+  const {
+    fetchList: fetchUsers,
+    setPage,
+    setSearch,
+    setFilters,
+    createItem: createUser,
+    updateItem: updateUser,
+    deleteItem: deleteUser
+  } = useUsersStore(
     useShallow((s) => ({
-      fetchUsers: s.fetchUsers,
+      fetchList: s.fetchList,
       setPage: s.setPage,
       setSearch: s.setSearch,
-      setRole: s.setRole,
-      setStatus: s.setStatus,
-      createUser: s.createUser,
-      updateUser: s.updateUser,
-      deleteUser: s.deleteUser
+      setFilters: s.setFilters,
+      createItem: s.createItem,
+      updateItem: s.updateItem,
+      deleteItem: s.deleteItem
     }))
   )
   const addToast = useUiStore((s) => s.addToast)
@@ -63,6 +68,11 @@ export function UsersPage(): React.JSX.Element {
   const fetchRoles = useRolesStore((s) => s.fetchRoles)
   const roles = roleDtos.map((role) => role.name)
   const canDelete = useHasPermission('users.delete')
+  // Cross-tenant creation: `tenants.read` is granted exclusively to PlatformAdmin.
+  const canCrossTenant = useHasPermission('tenants.read')
+  const tenantItems = useTenantsStore((s) => s.items)
+  const fetchTenants = useTenantsStore((s) => s.fetchList)
+  const [tenantSlug, setTenantSlug] = useState('')
   const {
     state: { showCreate, editingId, form, deleteTarget, deleteError },
     openCreate,
@@ -83,20 +93,30 @@ export function UsersPage(): React.JSX.Element {
     void fetchRoles() // lazy-cached once (hasLoaded guard) in the roles store
   }, [fetchUsers, fetchRoles])
 
+  // PlatformAdmins need the workspace list for the create-form tenant picker.
+  useEffect(() => {
+    if (canCrossTenant) void fetchTenants()
+  }, [canCrossTenant, fetchTenants])
+
   useEffect(() => {
     if (debouncedSearch !== filters.search) setSearch(debouncedSearch)
   }, [debouncedSearch, filters.search, setSearch])
 
-  const startEditUser = (user: (typeof items)[number]) => {
-    startEdit(user.id, {
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      password: '',
-      roles: user.roles,
-      status: user.status
-    })
-  }
+  // Referentially stable (useCallback) so the memoized UserRow can skip re-rendering:
+  // this handler closes over the page's editor actions but never the row data itself.
+  const startEditUser = useCallback(
+    (user: (typeof items)[number]) => {
+      startEdit(user.id, {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        password: '',
+        roles: user.roles,
+        status: user.status
+      })
+    },
+    [startEdit]
+  )
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -112,8 +132,13 @@ export function UsersPage(): React.JSX.Element {
         await updateUser(editingId, update)
         addToast('User updated', 'success')
       } else {
-        await createUser(form)
+        await createUser({
+          ...form,
+          // Only sent for PlatformAdmins who picked a workspace in the create form.
+          tenantSlug: canCrossTenant && tenantSlug ? tenantSlug : undefined
+        })
         addToast('User created', 'success')
+        setTenantSlug('')
       }
       resetForm()
     } catch {
@@ -169,12 +194,29 @@ export function UsersPage(): React.JSX.Element {
           </Button>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
+          {canCrossTenant && (
+            <TextField
+              select
+              size="small"
+              label="Workspace"
+              value={filters.tenantSlug ?? ''}
+              onChange={(e) => setFilters({ tenantSlug: e.target.value || null })}
+              sx={{ minWidth: 170 }}
+            >
+              <MenuItem value="">Your workspace</MenuItem>
+              {tenantItems.map((tenant) => (
+                <MenuItem key={tenant.id} value={tenant.slug}>
+                  {tenant.displayName} ({tenant.slug})
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
           <TextField
             select
             size="small"
             label="Role"
             value={filters.role ?? ''}
-            onChange={(e) => setRole((e.target.value || null) as RoleName | null)}
+            onChange={(e) => setFilters({ role: (e.target.value || null) as RoleName | null })}
             sx={{ minWidth: 150 }}
           >
             <MenuItem value="">All roles</MenuItem>
@@ -189,7 +231,7 @@ export function UsersPage(): React.JSX.Element {
             size="small"
             label="Status"
             value={filters.status}
-            onChange={(e) => setStatus(e.target.value as typeof filters.status)}
+            onChange={(e) => setFilters({ status: e.target.value as typeof filters.status })}
             sx={{ minWidth: 150 }}
           >
             <MenuItem value="all">All statuses</MenuItem>
@@ -237,6 +279,22 @@ export function UsersPage(): React.JSX.Element {
                 value={form.password}
                 onChange={(e) => updateForm({ password: e.target.value })}
               />
+            )}
+            {!editingId && canCrossTenant && (
+              <TextField
+                select
+                label="Workspace"
+                value={tenantSlug}
+                onChange={(e) => setTenantSlug(e.target.value)}
+                helperText="Defaults to your own workspace."
+              >
+                <MenuItem value="">Your workspace</MenuItem>
+                {tenantItems.map((tenant) => (
+                  <MenuItem key={tenant.id} value={tenant.slug}>
+                    {tenant.displayName} ({tenant.slug})
+                  </MenuItem>
+                ))}
+              </TextField>
             )}
             <TextField
               select
@@ -291,41 +349,18 @@ export function UsersPage(): React.JSX.Element {
                   <TableCell>Name</TableCell>
                   <TableCell>Roles</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell align="center">Actions</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {items.map((user) => (
-                  <TableRow key={user.id} hover>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      {user.firstName} {user.lastName}
-                    </TableCell>
-                    <TableCell>{user.roles.join(', ') || '—'}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={user.status}
-                        color={user.status === 'active' ? 'success' : user.status === 'locked' ? 'warning' : 'default'}
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <IconButton size="small" onClick={() => startEditUser(user)} aria-label={`Edit ${user.email}`}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      {canDelete && (
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => openDelete(user)}
-                          aria-label={`Delete ${user.email}`}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                  <UserRow
+                    key={user.id}
+                    user={user}
+                    canDelete={canDelete}
+                    onEdit={startEditUser}
+                    onDelete={openDelete}
+                  />
                 ))}
               </TableBody>
             </Table>

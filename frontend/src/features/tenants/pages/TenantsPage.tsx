@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -6,17 +6,14 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
-import Chip from '@mui/material/Chip'
-import IconButton from '@mui/material/IconButton'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
 import DialogActions from '@mui/material/DialogActions'
 import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material'
-import EditIcon from '@mui/icons-material/Edit'
-import DeleteIcon from '@mui/icons-material/Delete'
 import { useTenantsStore, selectTotalPages, selectHasNextPage, selectHasPrevPage } from '../tenants.store'
 import type { TenantDto } from '../tenants.types'
+import { TenantRow } from './TenantRow'
 import { ApiClientError } from '@/shared/api/client'
 import { useUiStore } from '@/shared/ui/ui.store'
 import { useEntityEditorState } from '@/shared/hooks/useEntityEditor'
@@ -34,12 +31,12 @@ export function TenantsPage(): React.JSX.Element {
   const totalCount = useTenantsStore((s) => s.totalCount)
   const filters = useTenantsStore((s) => s.filters)
   const error = useTenantsStore((s) => s.error)
-  const fetchTenants = useTenantsStore((s) => s.fetchTenants)
+  const fetchTenants = useTenantsStore((s) => s.fetchList)
   const setPage = useTenantsStore((s) => s.setPage)
   const setSearch = useTenantsStore((s) => s.setSearch)
-  const createTenant = useTenantsStore((s) => s.createTenant)
-  const updateTenant = useTenantsStore((s) => s.updateTenant)
-  const deleteTenant = useTenantsStore((s) => s.deleteTenant)
+  const createTenant = useTenantsStore((s) => s.createItem)
+  const updateTenant = useTenantsStore((s) => s.updateItem)
+  const deleteTenant = useTenantsStore((s) => s.deleteItem)
   const addToast = useUiStore((s) => s.addToast)
 
   const [searchInput, setSearchInput] = useState(filters.search)
@@ -69,9 +66,13 @@ export function TenantsPage(): React.JSX.Element {
     if (debouncedSearch !== filters.search) setSearch(debouncedSearch)
   }, [debouncedSearch, filters.search, setSearch])
 
-  const startEditTenant = (tenant: TenantDto) => {
-    startEdit(tenant.id, { name: tenant.name, displayName: tenant.displayName, slug: tenant.slug })
-  }
+  // Referentially stable (useCallback) so the memoized TenantRow can skip re-rendering.
+  const startEditTenant = useCallback(
+    (tenant: TenantDto) => {
+      startEdit(tenant.id, { name: tenant.name, displayName: tenant.displayName, slug: tenant.slug })
+    },
+    [startEdit]
+  )
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -98,15 +99,18 @@ export function TenantsPage(): React.JSX.Element {
     }
   }
 
-  const toggleStatus = async (tenant: TenantDto) => {
-    const next = tenant.status === 'active' ? 'suspended' : 'active'
-    try {
-      await updateTenant(tenant.id, { status: next })
-      addToast(`Tenant ${next === 'suspended' ? 'suspended' : 'reactivated'}`, 'success')
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Failed to change status', 'error')
-    }
-  }
+  const toggleStatus = useCallback(
+    async (tenant: TenantDto) => {
+      const next = tenant.status === 'active' ? 'suspended' : 'active'
+      try {
+        await updateTenant(tenant.id, { status: next })
+        addToast(`Tenant ${next === 'suspended' ? 'suspended' : 'reactivated'}`, 'success')
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'Failed to change status', 'error')
+      }
+    },
+    [updateTenant, addToast]
+  )
 
   const confirmDelete = async () => {
     if (!deleteTarget) return
@@ -164,51 +168,18 @@ export function TenantsPage(): React.JSX.Element {
                   <TableCell>Display name</TableCell>
                   <TableCell>Slug</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell align="center">Actions</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {items.map((tenant) => (
-                  <TableRow key={tenant.id} hover>
-                    <TableCell>{tenant.name}</TableCell>
-                    <TableCell>{tenant.displayName}</TableCell>
-                    <TableCell>{tenant.slug}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={tenant.status}
-                        color={tenant.status === 'active' ? 'success' : 'warning'}
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <IconButton
-                        size="small"
-                        onClick={() => startEditTenant(tenant)}
-                        aria-label={`Edit ${tenant.slug}`}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <Chip
-                        component="button"
-                        size="small"
-                        clickable
-                        label={tenant.status === 'active' ? 'Suspend' : 'Reactivate'}
-                        color={tenant.status === 'active' ? 'warning' : 'success'}
-                        onClick={() => toggleStatus(tenant)}
-                        sx={{ mr: 1 }}
-                      />
-                      <IconButton
-                        size="small"
-                        color="error"
-                        disabled={tenant.slug === 'platform'}
-                        onClick={() => openDelete(tenant)}
-                        aria-label={`Delete ${tenant.slug}`}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
+                  <TenantRow
+                    key={tenant.id}
+                    tenant={tenant}
+                    onEdit={startEditTenant}
+                    onToggleStatus={toggleStatus}
+                    onDelete={openDelete}
+                  />
                 ))}
               </TableBody>
             </Table>

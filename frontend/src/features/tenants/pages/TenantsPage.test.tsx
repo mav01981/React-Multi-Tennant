@@ -25,7 +25,7 @@ vi.mock('@/shared/ui/ui.store', () => ({
 const baseState = {
   items: [],
   totalCount: 0,
-  selectedTenantId: null,
+  selectedId: null,
   filters: { search: '', page: 1, pageSize: 10 },
   isLoading: false,
   error: null

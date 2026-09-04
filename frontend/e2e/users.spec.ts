@@ -12,7 +12,7 @@ async function goToUsers(page: Page): Promise<void> {
 }
 
 test.describe('Admin user management', () => {
-  test('creates, searches, edits and soft-deletes a user', async ({ page }) => {
+  test('creates, searches, edits and deletes a user', async ({ page }) => {
     await goToUsers(page)
 
     const email = `e2e-${uniqueSuffix()}@example.com`
@@ -25,7 +25,7 @@ test.describe('Admin user management', () => {
     await form.getByLabel('First name').fill('E2E')
     await form.getByLabel('Last name').fill('Fresh')
     await form.getByLabel('Password').fill('PlayMe-1!')
-    await form.getByRole('combobox').click()
+    await form.getByRole('combobox', { name: 'Role' }).click()
     await page.getByRole('option', { name: 'ReadOnly', exact: true }).click()
     await form.getByRole('button', { name: 'Create user', exact: true }).click()
 
@@ -51,13 +51,15 @@ test.describe('Admin user management', () => {
     await expect(page.getByText('User updated')).toBeVisible()
     await expect(row.getByText('Renamed Fresh')).toBeVisible()
 
-    // Soft-delete
+    // Delete permanently removes the row
     await page.getByRole('button', { name: `Delete ${email}` }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(page.getByText('User deleted')).toBeVisible()
-    await expect(row).toHaveCount(0)
+    // DELETE is a hard delete (the user record is removed), so the list refetch
+    // no longer contains the row at all.
+    await expect(row).not.toBeVisible()
   })
 
   test('blocks deleting the sole active admin', async ({ page }) => {

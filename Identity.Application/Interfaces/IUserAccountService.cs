@@ -17,5 +17,6 @@ public interface IUserAccountService
     Task<bool> IsLockedOutAsync(ApplicationUser user, CancellationToken ct = default);
     Task<IdentityResult> CreateWithPasswordAsync(ApplicationUser user, string password, CancellationToken ct = default);
     Task<IdentityResult> UpdateAsync(ApplicationUser user, CancellationToken ct = default);
+    Task<IdentityResult> DeleteAsync(ApplicationUser user, CancellationToken ct = default);
     Task<IdentityResult> ChangePasswordAsync(ApplicationUser user, string currentPassword, string newPassword, CancellationToken ct = default);
 }

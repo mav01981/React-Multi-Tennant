@@ -1,4 +1,4 @@
-import { useReducer } from 'react'
+import { useCallback, useReducer } from 'react'
 
 /**
  * Local state for a CRUD page's create/edit dialog and delete confirmation.
@@ -87,15 +87,34 @@ export function useEntityEditorState<T, F>(emptyForm: F): EntityEditorApi<T, F> 
     deleteError: null
   })
 
+  // All actions are memoized against the (stable) `dispatch` so their references
+  // survive re-renders. This keeps the callers' `useCallback` row handlers stable
+  // in turn, which is what lets memoized row components (UserRow/TenantRow) skip
+  // re-rendering while the page re-renders on unrelated state (e.g. search input).
+  const openCreate = useCallback(() => dispatch({ type: 'OPEN_CREATE', form: emptyForm }), [dispatch, emptyForm])
+  const startEdit = useCallback((id: string, form: F) => dispatch({ type: 'START_EDIT', id, form }), [dispatch])
+  const resetForm = useCallback(() => dispatch({ type: 'RESET' }), [dispatch])
+  const updateForm = useCallback((patch: Partial<F>) => dispatch({ type: 'UPDATE_FORM', patch }), [dispatch])
+  const setFormError = useCallback(
+    (message: string | null) => dispatch({ type: 'SET_FORM_ERROR', message }),
+    [dispatch]
+  )
+  const openDelete = useCallback((target: T) => dispatch({ type: 'OPEN_DELETE', target }), [dispatch])
+  const closeDelete = useCallback(() => dispatch({ type: 'CLOSE_DELETE' }), [dispatch])
+  const setDeleteError = useCallback(
+    (message: string | null) => dispatch({ type: 'SET_DELETE_ERROR', message }),
+    [dispatch]
+  )
+
   return {
     state,
-    openCreate: () => dispatch({ type: 'OPEN_CREATE', form: emptyForm }),
-    startEdit: (id, form) => dispatch({ type: 'START_EDIT', id, form }),
-    resetForm: () => dispatch({ type: 'RESET' }),
-    updateForm: (patch) => dispatch({ type: 'UPDATE_FORM', patch }),
-    setFormError: (message) => dispatch({ type: 'SET_FORM_ERROR', message }),
-    openDelete: (target) => dispatch({ type: 'OPEN_DELETE', target }),
-    closeDelete: () => dispatch({ type: 'CLOSE_DELETE' }),
-    setDeleteError: (message) => dispatch({ type: 'SET_DELETE_ERROR', message })
+    openCreate,
+    startEdit,
+    resetForm,
+    updateForm,
+    setFormError,
+    openDelete,
+    closeDelete,
+    setDeleteError
   }
 }

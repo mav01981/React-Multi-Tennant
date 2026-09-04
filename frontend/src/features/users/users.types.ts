@@ -18,6 +18,8 @@ export interface CreateUserRequest {
   lastName: string
   password: string
   roles: RoleName[]
+  /** PlatformAdmin only: create the user in this workspace instead of the caller's own. */
+  tenantSlug?: string
 }
 
 export interface UpdateUserRequest {
@@ -48,6 +50,8 @@ export interface UserFilters {
   search: string
   role: RoleName | null
   status: 'all' | 'active' | 'locked' | 'disabled'
+  /** PlatformAdmin only: list users of this workspace instead of the caller's own. */
+  tenantSlug: string | null
   page: number
   pageSize: number
 }
