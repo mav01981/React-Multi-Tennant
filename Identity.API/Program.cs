@@ -110,6 +110,10 @@ builder.Services.AddCors(options =>
 });
 
 // ── Rate limiting (auth endpoints → 429 + Retry-After) ─────────────────
+// Dev gets a higher permit limit: E2E suites perform many logins plus a silent
+// /auth/refresh on every boot, which would exhaust a production-sized budget
+// within the fixed window and fail tests with 429.
+var authPermitLimit = builder.Environment.IsDevelopment() ? 100 : 20;
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -118,7 +122,7 @@ builder.Services.AddRateLimiter(options =>
             context.Connection.RemoteIpAddress?.ToString() ?? "anon",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 20,
+                PermitLimit = authPermitLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst

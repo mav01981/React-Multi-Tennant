@@ -12,10 +12,12 @@ import type { ApiErrorResponse, LoginResponse } from '@/features/auth/auth.types
  */
 
 export interface AuthHandlers {
-  getTokens: () => { accessToken: string | null; refreshToken: string | null }
+  /** In-memory access token only — the refresh token lives in an HttpOnly cookie. */
+  getAccessToken: () => string | null
   /** Tenant slug of the active session; sent as X-Tenant-Id on every request. */
   getTenantSlug: () => string | null
-  onSessionUpdated: (tokens: { accessToken: string; refreshToken: string }) => void
+  /** Receives the fresh access token after a successful silent refresh. */
+  onSessionUpdated: (accessToken: string) => void
   onSessionCleared: () => void
 }
 
@@ -43,10 +45,37 @@ export class ApiClientError extends Error {
   }
 }
 
-// Single-flight: only one refresh request in flight at a time; concurrent 401s
-let refreshing: Promise<string | null> | null = null
+async function doRefresh(): Promise<LoginResponse | null> {
+  if (!handlers) return null
+  try {
+    // The refresh token itself rides in the HttpOnly cookie (SameSite=Strict) —
+    // it is never present in JavaScript, so nothing to put in the body here.
+    // credentials:'include' keeps this working if the API is ever served from a
+    // different origin than the SPA (the backend CORS policy must then allow it).
+    const res = await fetch(`${baseUrl}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        ...(handlers.getTenantSlug() ? { 'X-Tenant-Id': handlers.getTenantSlug()! } : {})
+      }
+    })
+    if (!res.ok) {
+      handlers.onSessionCleared()
+      return null
+    }
+    const data = (await res.json()) as LoginResponse
+    handlers.onSessionUpdated(data.accessToken)
+    return data
+  } catch {
+    handlers.onSessionCleared()
+    return null
+  }
+}
 
-async function refreshOnce(): Promise<string | null> {
+// Single-flight: only one refresh request in flight at a time; concurrent 401s
+let refreshing: Promise<LoginResponse | null> | null = null
+
+async function refreshOnce(): Promise<LoginResponse | null> {
   if (refreshing) return refreshing
   refreshing = doRefresh().finally(() => {
     refreshing = null
@@ -54,37 +83,19 @@ async function refreshOnce(): Promise<string | null> {
   return refreshing
 }
 
-async function doRefresh(): Promise<string | null> {
-  if (!handlers) return null
-  const { accessToken, refreshToken } = handlers.getTokens()
-  if (!accessToken || !refreshToken) return null
-  try {
-    const res = await fetch(`${baseUrl}/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(handlers.getTenantSlug() ? { 'X-Tenant-Id': handlers.getTenantSlug()! } : {})
-      },
-      body: JSON.stringify({ accessToken, refreshToken })
-    })
-    if (!res.ok) {
-      handlers.onSessionCleared()
-      return null
-    }
-    const data = (await res.json()) as LoginResponse
-    handlers.onSessionUpdated({ accessToken: data.accessToken, refreshToken: data.refreshToken })
-    return data.accessToken
-  } catch {
-    handlers.onSessionCleared()
-    return null
-  }
+/**
+ * Silent re-auth used by the auth store on boot: exchanges the HttpOnly refresh
+ * cookie for a fresh access token. Resolves null when there is no valid session.
+ */
+export function refreshAccessToken(): Promise<LoginResponse | null> {
+  return refreshOnce()
 }
 
 const AUTH_ENDPOINTS = new Set(['/auth/login', '/auth/refresh'])
 
 export async function apiFetch<T>(path: string, init: RequestInit & { auth?: boolean } = {}): Promise<T> {
   const { auth = true, ...rest } = init
-  const token = handlers?.getTokens().accessToken
+  const token = handlers?.getAccessToken()
   const headers = new Headers(rest.headers)
   if (rest.body) headers.set('Content-Type', 'application/json')
   // Multi-tenancy: the workspace slug rides along on every request. After login the
@@ -101,10 +112,10 @@ export async function apiFetch<T>(path: string, init: RequestInit & { auth?: boo
 
   if (response.status === 401 && auth && !AUTH_ENDPOINTS.has(path)) {
     // Access token expired → refresh once and replay the original request.
-    const newToken = await refreshOnce()
-    if (newToken) {
+    const refreshed = await refreshOnce()
+    if (refreshed) {
       const retryHeaders = new Headers(headers)
-      retryHeaders.set('Authorization', `Bearer ${newToken}`)
+      retryHeaders.set('Authorization', `Bearer ${refreshed.accessToken}`)
       response = await fetch(`${baseUrl}${path}`, { ...rest, headers: retryHeaders })
     }
   }

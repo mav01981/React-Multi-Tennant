@@ -52,7 +52,7 @@ const users: UserDto[] = [
 beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
-  useAuthStore.setState({ user: null, accessToken: null, refreshToken: null, isLoading: false, error: null })
+  useAuthStore.setState({ user: null, accessToken: null, isLoading: false, error: null })
   useUsersStore.setState({
     items: [],
     totalCount: 0,

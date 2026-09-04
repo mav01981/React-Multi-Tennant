@@ -23,7 +23,7 @@ function renderGuarded(path: string): void {
 
 beforeEach(() => {
   localStorage.clear()
-  useAuthStore.setState({ user: null, accessToken: null, refreshToken: null, isLoading: false, error: null })
+  useAuthStore.setState({ user: null, accessToken: null, isLoading: false, error: null })
 })
 
 describe('ProtectedRoute', () => {

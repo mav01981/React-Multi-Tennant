@@ -1,4 +1,4 @@
-import type { LoginRequest, LoginResponse, RefreshRequest, UserDto } from './auth.types'
+import type { LoginRequest, LoginResponse, UserDto } from './auth.types'
 import { apiFetch } from '@/shared/api/client'
 
 export const authApi = {
@@ -8,14 +8,6 @@ export const authApi = {
       body: JSON.stringify(credentials),
       auth: false,
       headers: { 'X-Tenant-Id': credentials.tenantSlug }
-    })
-  },
-
-  refresh(request: RefreshRequest): Promise<LoginResponse> {
-    return apiFetch<LoginResponse>('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify(request),
-      auth: false
     })
   },
 

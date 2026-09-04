@@ -48,7 +48,7 @@ public class UseCaseTests : IDisposable
         // Assert
         Assert.True(result.IsSuccess);
         Assert.NotEmpty(result.Value!.AccessToken);
-        Assert.NotEmpty(result.Value.RefreshToken);
+        Assert.NotEmpty(result.Value!.RefreshToken!);
         Assert.Equal(600, result.Value.ExpiresIn);
         Assert.Contains("Admin", result.Value.User.Roles);
         Assert.Equal(1, await _svc.Db.RefreshFamilies.CountAsync());
@@ -84,12 +84,12 @@ public class UseCaseTests : IDisposable
         await _svc.CreateUserAsync(tenant, "alice@acme.test");
         var auth = NewAuth();
         var login = await auth.LoginAsync(new LoginRequest("alice@acme.test", "Password-1!"), "acme");
-        var original = login.Value!.RefreshToken;
+        var original = login.Value!.RefreshToken!;
 
         // Act 1: rotate.
         var rotated = await auth.RefreshAsync(original);
         Assert.True(rotated.IsSuccess);
-        Assert.NotEqual(original, rotated.Value!.RefreshToken);
+        Assert.NotEqual(original, rotated.Value!.RefreshToken!);
 
         // Act 2: reuse of the already-rotated (revoked) token â†’ family revoked.
         var reuse = await auth.RefreshAsync(original);

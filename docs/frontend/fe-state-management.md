@@ -40,8 +40,7 @@ localStorage at module init).
 **Selectors (exported pure functions):** `selectIsAuthenticated`,
 `selectIsAdmin`, `selectIsManager`, `selectFullName`, `selectInitials`.
 
-**Actions:** `login`, `logout`, `fetchCurrentUser`, `refreshAccessToken`,
-`initialize`, `setUser`.
+**Actions:** `login`, `logout`, `fetchCurrentUser`, `initialize`, `setUser`.
 
 ### Session helpers
 
@@ -69,10 +68,12 @@ function clearSession(set): void {
 - `logout()` always runs `clearSession()` even if the API call fails.
 - `fetchCurrentUser()` clears the session on a 401/403 and re-throws; other
   errors propagate untouched.
-- `refreshAccessToken()` returns the new access token, or `null` when no tokens
-  are present; on a rejected refresh it re-throws. Clearing the session on a
-  failed *silent* refresh is the API client's job (`doRefresh` →
-  `onSessionCleared`).
+- Token refresh lives **only** in the API client's silent-refresh interceptor
+  (`shared/api/client.ts` → `doRefresh`/`refreshOnce`); there is deliberately no
+  store-level `refreshAccessToken()` action. The interceptor reads tokens via
+  the `setAuthHandlers` callbacks and writes rotated tokens back through
+  `onSessionUpdated`; clearing the session on a failed *silent* refresh is its
+  job (`doRefresh` → `onSessionCleared`).
 - `setUser(user | null)` is the single entry point for swapping the identity, so
   future derived state / side effects stay inside the store instead of being
   skipped by raw `setState({ user })` calls.

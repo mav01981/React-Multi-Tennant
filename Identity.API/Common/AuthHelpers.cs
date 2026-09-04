@@ -1,8 +1,45 @@
+using Identity.Application.Contracts;
 using Identity.Domain;
 using Identity.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 
 namespace Identity.Api.Common;
+
+/// <summary>
+/// The refresh token is a long-lived credential, so it never travels in a JSON body
+/// readable by scripts: it is issued as an HttpOnly, SameSite=Strict cookie scoped
+/// to the auth path, making it invisible to JavaScript (XSS cannot exfiltrate it)
+/// and unavailable to cross-site requests. Secure is on except in development,
+/// where the API runs over plain HTTP on localhost (a trustworthy context).
+/// </summary>
+public static class RefreshTokenCookie
+{
+    public const string Name = "refreshToken";
+
+    /// <summary>Scoped so the cookie rides only on /auth requests (login/refresh/logout).</summary>
+    private static CookieOptions Options(bool secure, int? maxAgeSeconds = null) => new()
+    {
+        HttpOnly = true,
+        Secure = secure,
+        SameSite = SameSiteMode.Strict,
+        Path = ApiContract.BasePath + "/auth",
+        IsEssential = true,
+        MaxAge = maxAgeSeconds is null ? null : TimeSpan.FromSeconds(maxAgeSeconds.Value)
+    };
+
+    /// <summary>True except in the development environment (plain-HTTP localhost).</summary>
+    public static bool IsSecure(HttpContext http) =>
+        !http.RequestServices.GetRequiredService<IHostEnvironment>().IsDevelopment();
+
+    public static void Set(HttpContext http, string token, int ttlSeconds) =>
+        http.Response.Cookies.Append(Name, token, Options(IsSecure(http), ttlSeconds));
+
+    public static string? Read(HttpContext http) =>
+        http.Request.Cookies.TryGetValue(Name, out var value) ? value : null;
+
+    public static void Delete(HttpContext http) =>
+        http.Response.Cookies.Delete(Name, Options(IsSecure(http)));
+}
 
 /// <summary>
 /// Reusable authorization helpers shared by the endpoint groups. Backend enforces

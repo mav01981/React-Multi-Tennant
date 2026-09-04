@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { UserDto, LoginResponse } from './auth.types'
-import { ApiClientError } from '@/shared/api/client'
+import { ApiClientError, refreshAccessToken } from '@/shared/api/client'
 import {
   useAuthStore,
   selectIsAuthenticated,
@@ -15,12 +15,19 @@ const { authApiMock } = vi.hoisted(() => ({
   authApiMock: {
     login: vi.fn(),
     logout: vi.fn(),
-    refresh: vi.fn(),
     me: vi.fn()
   }
 }))
 
 vi.mock('./api', () => ({ authApi: authApiMock }))
+
+// Keep the real client module (handler registration, ApiClientError) but make the
+// cookie-based silent refresh observable.
+vi.mock('@/shared/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/api/client')>()
+  return { ...actual, refreshAccessToken: vi.fn() }
+})
+const refreshMock = vi.mocked(refreshAccessToken)
 
 const user: UserDto = {
   id: 'user-1',
@@ -36,7 +43,6 @@ const user: UserDto = {
 
 const loginResponse: LoginResponse = {
   accessToken: 'access-token',
-  refreshToken: 'refresh-token',
   expiresIn: 900,
   user
 }
@@ -44,7 +50,6 @@ const loginResponse: LoginResponse = {
 const baseState = {
   user: null,
   accessToken: null,
-  refreshToken: null,
   isLoading: false,
   error: null,
   isInitialized: false
@@ -57,21 +62,23 @@ beforeEach(() => {
 })
 
 describe('auth store – login', () => {
-  it('sets the session and persists tokens to localStorage on success', async () => {
+  it('sets the session in memory and persists no tokens to localStorage', async () => {
     authApiMock.login.mockResolvedValue(loginResponse)
 
     await useAuthStore.getState().login({ tenantSlug: 'acme', email: user.email, password: 'pw' })
 
     const state = useAuthStore.getState()
     expect(state.accessToken).toBe('access-token')
-    expect(state.refreshToken).toBe('refresh-token')
     expect(state.tenantSlug).toBe('acme')
     expect(state.user).toEqual(user)
     expect(state.isLoading).toBe(false)
     expect(state.error).toBeNull()
-    expect(localStorage.getItem('accessToken')).toBe('access-token')
-    expect(localStorage.getItem('refreshToken')).toBe('refresh-token')
+    // Tokens must never touch localStorage — XSS-readable storage is out of scope
+    // for credentials. Only the tenant slug + a session hint may be persisted.
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(localStorage.getItem('refreshToken')).toBeNull()
     expect(localStorage.getItem('tenantSlug')).toBe('acme')
+    expect(localStorage.getItem('hasSession')).toBe('1')
   })
 
   it('records the error, re-throws, and resets loading on failure', async () => {
@@ -105,18 +112,15 @@ describe('auth store – login', () => {
 
 describe('auth store – logout / fetchCurrentUser', () => {
   it('clears the local session even when the API call fails', async () => {
-    useAuthStore.setState({ user, accessToken: 'at', refreshToken: 'rt' })
-    localStorage.setItem('accessToken', 'at')
-    localStorage.setItem('refreshToken', 'rt')
+    useAuthStore.setState({ user, accessToken: 'at' })
+    localStorage.setItem('hasSession', '1')
     authApiMock.logout.mockRejectedValue(new Error('network down'))
 
     await useAuthStore.getState().logout()
 
     expect(useAuthStore.getState().user).toBeNull()
     expect(useAuthStore.getState().accessToken).toBeNull()
-    expect(useAuthStore.getState().refreshToken).toBeNull()
-    expect(localStorage.getItem('accessToken')).toBeNull()
-    expect(localStorage.getItem('refreshToken')).toBeNull()
+    expect(localStorage.getItem('hasSession')).toBeNull()
   })
 
   it('skips fetchCurrentUser when there is no access token', async () => {
@@ -133,52 +137,59 @@ describe('auth store – logout / fetchCurrentUser', () => {
   })
 
   it('clears the session when /me fails with a 401', async () => {
-    useAuthStore.setState({ accessToken: 'at', refreshToken: 'rt', user })
-    localStorage.setItem('accessToken', 'at')
-    localStorage.setItem('refreshToken', 'rt')
+    useAuthStore.setState({ accessToken: 'at', user })
     authApiMock.me.mockRejectedValue(new ApiClientError(401, 'UNAUTHENTICATED', 'expired'))
 
     await expect(useAuthStore.getState().fetchCurrentUser()).rejects.toThrow(ApiClientError)
 
     expect(useAuthStore.getState().accessToken).toBeNull()
-    expect(useAuthStore.getState().refreshToken).toBeNull()
     expect(useAuthStore.getState().user).toBeNull()
   })
 })
 
 describe('auth store – initialize (silent re-auth on boot)', () => {
-  it('marks initialized immediately when there is no stored token', async () => {
+  it('marks initialized without a refresh round-trip when no session hint exists', async () => {
     useAuthStore.setState({ accessToken: null, isInitialized: false })
 
     await useAuthStore.getState().initialize()
 
-    expect(authApiMock.me).not.toHaveBeenCalled()
+    expect(refreshMock).not.toHaveBeenCalled()
     expect(useAuthStore.getState().isInitialized).toBe(true)
   })
 
-  it('hydrates the user and marks initialized when a token is restored', async () => {
+  it('re-derives the session from the refresh cookie when a hint exists', async () => {
+    localStorage.setItem('hasSession', '1')
+    refreshMock.mockResolvedValue(loginResponse)
+
+    await useAuthStore.getState().initialize()
+
+    expect(refreshMock).toHaveBeenCalledTimes(1)
+    expect(useAuthStore.getState().accessToken).toBe('access-token')
+    expect(useAuthStore.getState().user).toEqual(user)
+    expect(useAuthStore.getState().isInitialized).toBe(true)
+  })
+
+  it('clears the session yet still marks initialized when silent re-auth fails', async () => {
+    localStorage.setItem('hasSession', '1')
+    refreshMock.mockResolvedValue(null)
+
+    await useAuthStore.getState().initialize()
+
+    expect(useAuthStore.getState().accessToken).toBeNull()
+    expect(useAuthStore.getState().user).toBeNull()
+    // The splash must never be left hanging — even a failed refresh settles the gate.
+    expect(useAuthStore.getState().isInitialized).toBe(true)
+  })
+
+  it('hydrates the user via /me when an access token is already in memory', async () => {
     useAuthStore.setState({ accessToken: 'at', isInitialized: false })
     authApiMock.me.mockResolvedValue(user)
 
     await useAuthStore.getState().initialize()
 
+    expect(refreshMock).not.toHaveBeenCalled()
     expect(authApiMock.me).toHaveBeenCalledTimes(1)
     expect(useAuthStore.getState().user).toEqual(user)
-    expect(useAuthStore.getState().isInitialized).toBe(true)
-  })
-
-  it('clears the session yet still marks initialized when /me fails', async () => {
-    useAuthStore.setState({ accessToken: 'at', refreshToken: 'rt', user, isInitialized: false })
-    localStorage.setItem('accessToken', 'at')
-    localStorage.setItem('refreshToken', 'rt')
-    authApiMock.me.mockRejectedValue(new ApiClientError(401, 'UNAUTHENTICATED', 'expired'))
-
-    await expect(useAuthStore.getState().initialize()).rejects.toThrow(ApiClientError)
-
-    expect(authApiMock.me).toHaveBeenCalledTimes(1)
-    expect(useAuthStore.getState().accessToken).toBeNull()
-    expect(useAuthStore.getState().user).toBeNull()
-    // The splash must never be left hanging — even a failed /me settles the gate.
     expect(useAuthStore.getState().isInitialized).toBe(true)
   })
 })

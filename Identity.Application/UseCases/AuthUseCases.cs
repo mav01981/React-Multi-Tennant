@@ -62,7 +62,11 @@ public sealed class AuthUseCases(
         await refreshTokens.AddFamilyAsync(family);
         await unitOfWork.CommitAsync();
 
-        return UseCaseResult<LoginResponse>.Ok(new LoginResponse(access, rawRefresh, jwt.AccessTtlSeconds, UserDto.From(user, roles)));
+        return UseCaseResult<LoginResponse>.Ok(new LoginResponse(access, jwt.AccessTtlSeconds, UserDto.From(user, roles))
+        {
+            RefreshToken = rawRefresh,
+            RefreshTtlSeconds = jwt.RefreshTtlSeconds
+        });
     }
 
     public async Task<UseCaseResult<LoginResponse>> RefreshAsync(string? rawRefreshToken)
@@ -113,7 +117,11 @@ public sealed class AuthUseCases(
 
         var roles = await users.GetRoleNamesAsync(user!);
         var access = jwt.CreateAccessToken(user!, roles, now);
-        return UseCaseResult<LoginResponse>.Ok(new LoginResponse(access, rawRefresh, jwt.AccessTtlSeconds, UserDto.From(user!, roles)));
+        return UseCaseResult<LoginResponse>.Ok(new LoginResponse(access, jwt.AccessTtlSeconds, UserDto.From(user!, roles))
+        {
+            RefreshToken = rawRefresh,
+            RefreshTtlSeconds = jwt.RefreshTtlSeconds
+        });
     }
 
     /// <summary>Idempotent: always reports success without a payload.</summary>

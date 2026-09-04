@@ -46,8 +46,9 @@ export const selectRoles = (s: RolesState) => s.roles
 /**
  * Whether the current authenticated user holds a given permission (feat-04 §5).
  * The `permission` argument is the `Permission` union — a typo'd literal like
- * `'users.reads'` fails to compile. For a non-hook check see `hasPermission`
- * in `./permissions`.
+ * `'users.reads'` fails to compile. This catalog lookup (server-fetched roles)
+ * is the single source of truth for permission checks; there is deliberately
+ * no static role → permission map on the frontend.
  */
 export function useHasPermission(permission: Permission): boolean {
   const user = useAuthStore((s) => s.user)

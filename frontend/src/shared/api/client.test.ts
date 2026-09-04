@@ -12,7 +12,7 @@ function jsonResponse(status: number, body?: unknown): Response {
 
 const baseUrl = 'http://localhost/api/v1'
 const handlers: AuthHandlers = {
-  getTokens: () => ({ accessToken: 'access', refreshToken: 'refresh' }),
+  getAccessToken: () => 'access',
   getTenantSlug: () => null,
   onSessionUpdated: vi.fn(),
   onSessionCleared: vi.fn()
@@ -24,7 +24,7 @@ beforeEach(() => {
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
   configureClient(baseUrl)
-  setAuthHandlers({ ...handlers, getTokens: () => ({ accessToken: 'access', refreshToken: 'refresh' }) })
+  setAuthHandlers({ ...handlers, getAccessToken: () => 'access' })
   vi.clearAllMocks()
 })
 
@@ -131,10 +131,13 @@ describe('apiFetch – single-flight refresh + replay', () => {
     const result = await apiFetch<{ data: string }>('/secure', { method: 'GET' })
 
     expect(result).toEqual({ data: 'ok' })
-    // Refresh request posts the old tokens to /auth/refresh.
+    // Refresh is cookie-authenticated: no token body, credentials included.
     expect(fetchMock.mock.calls[1][0]).toBe(`${baseUrl}/auth/refresh`)
-    expect(fetchMock.mock.calls[1][1].body).toContain('"accessToken":"access"')
-    expect(handlers.onSessionUpdated).toHaveBeenCalledWith({ accessToken: 'new-token', refreshToken: 'new-refresh' })
+    const refreshInit = fetchMock.mock.calls[1][1]
+    expect(refreshInit.credentials).toBe('include')
+    expect(refreshInit.body).toBeUndefined()
+    expect(refreshInit.headers.Authorization).toBeUndefined()
+    expect(handlers.onSessionUpdated).toHaveBeenCalledWith('new-token')
     // Replay carried the refreshed token.
     const replayHeaders = fetchMock.mock.calls[2][1].headers
     expect(replayHeaders.get('Authorization')).toBe('Bearer new-token')
@@ -182,7 +185,7 @@ describe('apiFetch – single-flight refresh + replay', () => {
     // Exactly one refresh round-trip for two concurrent 401s.
     const refreshCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/refresh'))
     expect(refreshCalls).toHaveLength(1)
-    expect(handlers.onSessionUpdated).toHaveBeenCalledTimes(1)
+    expect(handlers.onSessionUpdated).toHaveBeenCalledWith('new-token')
   })
 
   it('does not attempt refresh for the auth endpoints themselves', async () => {

@@ -21,14 +21,8 @@ export interface LoginRequest {
   password: string
 }
 
-export interface RefreshRequest {
-  accessToken: string
-  refreshToken: string
-}
-
 export interface LoginResponse {
   accessToken: string
-  refreshToken: string
   expiresIn: number
   user: UserDto
 }

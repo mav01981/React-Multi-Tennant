@@ -5,6 +5,13 @@
  * names are modeled as literal-union types (derived from the const objects
  * below), never raw `string` — so a typo like `'users.reads'` or `'Admni'` is
  * caught at compile time instead of silently failing closed at runtime.
+ *
+ * NOTE: this module intentionally does NOT define a role → permission map.
+ * Runtime gating goes through `useHasPermission` in `roles.store.ts`, which
+ * checks the server-fetched role catalog (`GET /roles`) — the backend remains
+ * the only source of truth for which role grants which permission. A previous
+ * hand-synced `ROLE_PERMISSIONS` map here was deleted: it was dead at runtime
+ * and a maintenance trap (edits to it silently changed nothing).
  */
 
 /** Canonical permission ids (`resource.action`), kept in sync with the backend. */
@@ -33,49 +40,4 @@ export const ROLE = {
 /** Union of all valid role names. */
 export type RoleName = (typeof ROLE)[keyof typeof ROLE]
 
-/**
- * Code-based role → permission map, mirrored from `Permissions.Map` on the
- * backend. Used by the pure `hasPermission` helper; the `roles` store's
- * catalog-driven hook remains the runtime source of truth for UI gating.
- */
-export const ROLE_PERMISSIONS: Record<RoleName, readonly Permission[]> = {
-  [ROLE.ADMIN]: [
-    PERMISSION.USERS_READ,
-    PERMISSION.USERS_WRITE,
-    PERMISSION.USERS_DELETE,
-    PERMISSION.ROLES_READ,
-    PERMISSION.PROFILE_READ,
-    PERMISSION.PROFILE_WRITE
-  ],
-  [ROLE.MANAGER]: [PERMISSION.USERS_READ, PERMISSION.USERS_WRITE, PERMISSION.PROFILE_READ, PERMISSION.PROFILE_WRITE],
-  [ROLE.READ_ONLY]: [PERMISSION.PROFILE_READ, PERMISSION.PROFILE_WRITE],
-  [ROLE.PLATFORM_ADMIN]: [
-    PERMISSION.TENANTS_READ,
-    PERMISSION.TENANTS_WRITE,
-    PERMISSION.USERS_READ,
-    PERMISSION.USERS_WRITE,
-    PERMISSION.USERS_DELETE,
-    PERMISSION.ROLES_READ,
-    PERMISSION.PROFILE_READ,
-    PERMISSION.PROFILE_WRITE
-  ]
-}
 
-/**
- * Pure (non-hook) permission check with compile-time typing:
- *
- * ```ts
- * hasPermission(user.roles, 'users.read')      // ✅
- * hasPermission(user.roles, 'users.reads')     // ❌ compile error (typo)
- * hasPermission<'tenants.write'>(roles, 'tenants.write') // explicit type arg
- * ```
- *
- * Unknown/absent role grants fail closed (`false`), matching the backend.
- */
-export function hasPermission<const P extends Permission>(
-  userRoles: readonly RoleName[] | null | undefined,
-  permission: P
-): boolean {
-  if (!userRoles || userRoles.length === 0) return false
-  return userRoles.some((role) => ROLE_PERMISSIONS[role]?.includes(permission))
-}

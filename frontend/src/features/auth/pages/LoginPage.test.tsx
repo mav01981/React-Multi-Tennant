@@ -46,7 +46,7 @@ async function submitCredentials(email: string, password: string): Promise<void>
 beforeEach(() => {
   localStorage.clear()
   authApiMock.login.mockReset()
-  useAuthStore.setState({ user: null, accessToken: null, refreshToken: null, isLoading: false, error: null })
+  useAuthStore.setState({ user: null, accessToken: null, isLoading: false, error: null })
 })
 
 describe('LoginPage', () => {
@@ -59,7 +59,6 @@ describe('LoginPage', () => {
   it('navigates home and records the session after a successful login', async () => {
     authApiMock.login.mockResolvedValue({
       accessToken: 'access-token',
-      refreshToken: 'refresh-token',
       expiresIn: 900,
       user: loginUser
     })

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Identity.Domain.Entities;
 
 namespace Identity.Application.Contracts;
@@ -15,7 +16,21 @@ public record LoginRequest(string Email, string Password);
 
 public record RefreshRequest(string AccessToken, string RefreshToken);
 
-public record LoginResponse(string AccessToken, string RefreshToken, int ExpiresIn, UserDto User);
+public record LoginResponse(string AccessToken, int ExpiresIn, UserDto User)
+{
+    /// <summary>
+    /// Rotated refresh token for the session. Deliberately excluded from the JSON
+    /// body: it is delivered to browsers as an HttpOnly cookie (see
+    /// Identity.Api.Common.RefreshTokenCookie). It remains part of this record so
+    /// the Application layer keeps a single result type.
+    /// </summary>
+    [JsonIgnore]
+    public string? RefreshToken { get; init; }
+
+    /// <summary>Lifetime (seconds) for the refresh-token cookie. Not serialized.</summary>
+    [JsonIgnore]
+    public int RefreshTtlSeconds { get; init; }
+}
 
 public record UserDto(
     string Id,
