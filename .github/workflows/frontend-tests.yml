@@ -7,7 +7,7 @@ on:
 
 jobs:
   frontend-tests:
-    name: Vitest + Typecheck
+    name: Lint + Typecheck + Vitest
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,6 +28,14 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Lint
+        # Fail CI on ESLint errors/warnings (e.g. react-hooks/exhaustive-deps).
+        run: npm run lint
+
+      - name: Format check
+        # Fail CI on Prettier drift so formatting stays consistent.
+        run: npm run format:check
 
       - name: Run tests with coverage
         # NOTE: the 'basic' reporter was removed in Vitest 3+ — use the default one.

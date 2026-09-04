@@ -39,5 +39,3 @@ export const ROLE = {
 
 /** Union of all valid role names. */
 export type RoleName = (typeof ROLE)[keyof typeof ROLE]
-
-

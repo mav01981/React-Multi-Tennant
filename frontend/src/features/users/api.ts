@@ -1,4 +1,10 @@
-import type { UserListResponse, CreateUserRequest, UpdateUserRequest, UpdateProfileRequest, ChangePasswordRequest } from './users.types'
+import type {
+  UserListResponse,
+  CreateUserRequest,
+  UpdateUserRequest,
+  UpdateProfileRequest,
+  ChangePasswordRequest
+} from './users.types'
 import type { RoleName } from '@/features/roles/permissions'
 import type { UserDto } from '@/features/auth/auth.types'
 import { apiFetch } from '@/shared/api/client'

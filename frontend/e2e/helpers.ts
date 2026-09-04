@@ -57,13 +57,10 @@ export async function loginAs(page: Page, creds: Credentials): Promise<void> {
       data: { email: creds.email, password: creds.password }
     })
     if (!res.ok()) throw new Error(`Login failed (${res.status()}): ${await res.text()}`)
-    await page.evaluate(
-      (tenant) => {
-        window.localStorage.setItem('tenantSlug', tenant)
-        window.localStorage.setItem('hasSession', '1')
-      },
-      creds.tenantSlug
-    )
+    await page.evaluate((tenant) => {
+      window.localStorage.setItem('tenantSlug', tenant)
+      window.localStorage.setItem('hasSession', '1')
+    }, creds.tenantSlug)
     const preCookie = (await page.context().cookies()).find((c) => c.name === 'refreshToken')?.value
     await page.goto('/')
     try {

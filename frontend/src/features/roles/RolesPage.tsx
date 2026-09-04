@@ -7,17 +7,19 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { useRolesStore } from './roles.store'
 import type { Permission } from './permissions'
 
-const PERMISSION_COLOR: Record<Permission, 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'default'> =
-  {
-    'users.read': 'primary',
-    'users.write': 'warning',
-    'users.delete': 'error',
-    'roles.read': 'info',
-    'profile.read': 'success',
-    'profile.write': 'success',
-    'tenants.read': 'secondary',
-    'tenants.write': 'error'
-  }
+const PERMISSION_COLOR: Record<
+  Permission,
+  'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' | 'default'
+> = {
+  'users.read': 'primary',
+  'users.write': 'warning',
+  'users.delete': 'error',
+  'roles.read': 'info',
+  'profile.read': 'success',
+  'profile.write': 'success',
+  'tenants.read': 'secondary',
+  'tenants.write': 'error'
+}
 
 /**
  * Read-only Roles & Permissions view (feat-04 §3.3). Demonstrates the lazy-once
