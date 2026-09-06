@@ -27,3 +27,6 @@ Thumbs.db
 **/test-results/**
 **/playwright-report/**
 **/playwright/.cache/**
+**/.lhci-reports/**
+**/.lighthouseci/**
+**/.lighthouseci-tmp/**

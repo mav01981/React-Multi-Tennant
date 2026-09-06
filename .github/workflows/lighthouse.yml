@@ -1,0 +1,62 @@
+name: Lighthouse CI
+run-name: Lighthouse CI - ${{ github.workflow }} / ${{ github.ref_name }} / ${{ github.event_name }} / ${{ github.run_number }}
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  lighthouse:
+    name: Lighthouse Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run Lighthouse CI
+        id: lighthouse
+        # Lighthouse CI will report scores and upload artifacts but will NOT fail the build.
+        # This allows teams to monitor performance trends without blocking merges.
+        continue-on-error: true
+        run: npm run test:lighthouse
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lighthouse-reports
+          path: frontend/.lhci-reports
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Lighthouse CI Summary
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.lighthouse.outcome }}" == "success" ]; then
+            echo "## ✅ Lighthouse CI Passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## ⚠️ Lighthouse CI Completed with Warnings" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Lighthouse audit found issues but did **not** fail the build (configured as non-blocking)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Check the uploaded artifacts for detailed reports." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reports are available as build artifacts (retention: 14 days)." >> "$GITHUB_STEP_SUMMARY"

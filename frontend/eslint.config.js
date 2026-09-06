@@ -27,7 +27,7 @@ export default tseslint.config(
   // Applies to all frontend source + tooling config. Browser globals for `src`,
   // Node globals for config/tooling files (both are TS here).
   {
-    files: ['src/**/*.{ts,tsx}', 'vite.config.ts', 'playwright.config.ts'],
+    files: ['src/**/*.{ts,tsx}', 'vite.config.ts', 'playwright.config.ts', 'scripts/**/*.{mjs,cjs}'],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node }
     }

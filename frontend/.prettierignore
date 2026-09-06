@@ -3,6 +3,9 @@ dist/
 coverage/
 playwright-report/
 test-results/
+.lhci-reports/
+.lighthouseci/
+.lighthouseci-tmp/
 package-lock.json
 *.tsbuildinfo
 *.tsbuildinfo.*
