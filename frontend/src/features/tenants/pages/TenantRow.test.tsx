@@ -58,6 +58,14 @@ describe('TenantRow', () => {
     expect(onToggleStatus).toHaveBeenCalledWith(tenant)
   })
 
+  it('disables the toggle chip and shows a spinner while a toggle is pending', () => {
+    renderRow({ isToggling: true })
+    const toggle = screen.getByRole('button', { name: 'Suspend' })
+    // MUI Chip signals disabled via the Mui-disabled class (pointer-events: none), not the attribute.
+    expect(toggle.classList.contains('Mui-disabled')).toBe(true)
+    expect(toggle.querySelector('.MuiCircularProgress-root')).not.toBeNull()
+  })
+
   it('calls onDelete with the row tenant (unless disabled for platform)', () => {
     const { onDelete } = renderRow()
     fireEvent.click(screen.getByRole('button', { name: 'Delete acme' }))

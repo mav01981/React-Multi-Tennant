@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { TableRow, TableCell, Chip, IconButton } from '@mui/material'
+import { TableRow, TableCell, Chip, IconButton, CircularProgress } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import type { TenantDto } from '../tenants.types'
@@ -7,6 +7,8 @@ import type { TenantDto } from '../tenants.types'
 export interface TenantRowProps {
   /** Row data from the tenants store (referentially stable unless the row changes). */
   tenant: TenantDto
+  /** True while a Suspend/Reactivate request is in flight — disables + spins the toggle chip. */
+  isToggling?: boolean
   /** Edit action; must be referentially stable (useCallback) to preserve the memo. */
   onEdit: (tenant: TenantDto) => void
   /** Suspend/reactivate action; must be referentially stable to preserve the memo. */
@@ -21,7 +23,13 @@ export interface TenantRowProps {
  * so a referentially-stable prop set lets React skip the rows. Keep handlers stable
  * with `useCallback` in the caller; inline arrows would defeat the memo.
  */
-export const TenantRow = memo(function TenantRow({ tenant, onEdit, onToggleStatus, onDelete }: TenantRowProps) {
+export const TenantRow = memo(function TenantRow({
+  tenant,
+  isToggling = false,
+  onEdit,
+  onToggleStatus,
+  onDelete
+}: TenantRowProps) {
   return (
     <TableRow hover>
       <TableCell>{tenant.name}</TableCell>
@@ -42,7 +50,9 @@ export const TenantRow = memo(function TenantRow({ tenant, onEdit, onToggleStatu
         <Chip
           component="button"
           size="small"
-          clickable
+          clickable={!isToggling}
+          disabled={isToggling}
+          icon={isToggling ? <CircularProgress size={14} color="inherit" /> : undefined}
           label={tenant.status === 'active' ? 'Suspend' : 'Reactivate'}
           color={tenant.status === 'active' ? 'warning' : 'success'}
           onClick={() => onToggleStatus(tenant)}

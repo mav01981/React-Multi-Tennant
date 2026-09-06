@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useOptimistic, useState, startTransition } from 'react'
+import { useCallback, useEffect, useActionState, useOptimistic, useState, startTransition, useTransition } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -61,6 +61,13 @@ export function UsersPage(): React.JSX.Element {
     }))
   )
   const addToast = useUiStore((s) => s.addToast)
+
+  // Pagination/filter changes run inside a transition so the current rows stay
+  // mounted (dimmed) while the next page loads. The full-screen spinner is
+  // reserved for the true initial load only. (Named startListTransition because
+  // the top-level startTransition below serves the optimistic delete path.)
+  const [isPending, startListTransition] = useTransition()
+  const changeList = (update: () => void): void => startListTransition(update)
 
   // Optimistic delete (React 19): rows vanish from the table the moment delete is
   // confirmed, before the API round-trip. The store still owns the truth — if the
@@ -126,32 +133,44 @@ export function UsersPage(): React.JSX.Element {
     [startEdit]
   )
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    try {
-      if (editingId) {
-        const update: UpdateUserRequest = {
-          email: form.email,
-          firstName: form.firstName,
-          lastName: form.lastName,
-          roles: form.roles,
-          status: form.status
+  // Create/edit submit via useActionState: gives isPending so the submit button
+  // disables while the request is in flight (no double-submits). API errors keep
+  // surfacing through the store error above the table (createItem/updateItem set
+  // it before rethrowing), so the action swallows and returns null.
+  const [, submitUserForm, isSubmitting] = useActionState(
+    async (_prev: null, payload: { editingId: string | null; form: UserForm; tenantSlug: string }): Promise<null> => {
+      try {
+        if (payload.editingId) {
+          const update: UpdateUserRequest = {
+            email: payload.form.email,
+            firstName: payload.form.firstName,
+            lastName: payload.form.lastName,
+            roles: payload.form.roles,
+            status: payload.form.status
+          }
+          await updateUser(payload.editingId, update)
+          addToast('User updated', 'success')
+        } else {
+          await createUser({
+            ...payload.form,
+            // Only sent for PlatformAdmins who picked a workspace in the create form.
+            tenantSlug: canCrossTenant && payload.tenantSlug ? payload.tenantSlug : undefined
+          })
+          addToast('User created', 'success')
+          setTenantSlug('')
         }
-        await updateUser(editingId, update)
-        addToast('User updated', 'success')
-      } else {
-        await createUser({
-          ...form,
-          // Only sent for PlatformAdmins who picked a workspace in the create form.
-          tenantSlug: canCrossTenant && tenantSlug ? tenantSlug : undefined
-        })
-        addToast('User created', 'success')
-        setTenantSlug('')
+        resetForm()
+      } catch {
+        // The store exposes the API error above the table.
       }
-      resetForm()
-    } catch {
-      // The store exposes the API error above the table.
-    }
+      return null
+    },
+    null
+  )
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
+    e.preventDefault()
+    submitUserForm({ editingId, form, tenantSlug })
   }
 
   const confirmDelete = () => {
@@ -198,7 +217,7 @@ export function UsersPage(): React.JSX.Element {
             color="inherit"
             onClick={() => {
               setSearchInput('')
-              setSearch('')
+              changeList(() => setSearch(''))
             }}
           >
             Clear
@@ -214,7 +233,7 @@ export function UsersPage(): React.JSX.Element {
               size="small"
               label="Workspace"
               value={filters.tenantSlug ?? ''}
-              onChange={(e) => setFilters({ tenantSlug: e.target.value || null })}
+              onChange={(e) => changeList(() => setFilters({ tenantSlug: e.target.value || null }))}
               sx={{ minWidth: 170 }}
             >
               <MenuItem value="">Your workspace</MenuItem>
@@ -230,7 +249,7 @@ export function UsersPage(): React.JSX.Element {
             size="small"
             label="Role"
             value={filters.role ?? ''}
-            onChange={(e) => setFilters({ role: (e.target.value || null) as RoleName | null })}
+            onChange={(e) => changeList(() => setFilters({ role: (e.target.value || null) as RoleName | null }))}
             sx={{ minWidth: 150 }}
           >
             <MenuItem value="">All roles</MenuItem>
@@ -245,7 +264,7 @@ export function UsersPage(): React.JSX.Element {
             size="small"
             label="Status"
             value={filters.status}
-            onChange={(e) => setFilters({ status: e.target.value as typeof filters.status })}
+            onChange={(e) => changeList(() => setFilters({ status: e.target.value as typeof filters.status }))}
             sx={{ minWidth: 150 }}
           >
             <MenuItem value="all">All statuses</MenuItem>
@@ -336,8 +355,8 @@ export function UsersPage(): React.JSX.Element {
               </TextField>
             )}
             <Box sx={{ gridColumn: '1 / -1', display: 'flex', gap: 1, mt: 1 }}>
-              <Button type="submit" variant="contained">
-                {editingId ? 'Save changes' : 'Create user'}
+              <Button type="submit" variant="contained" disabled={isSubmitting}>
+                {isSubmitting ? 'Saving…' : editingId ? 'Save changes' : 'Create user'}
               </Button>
               <Button type="button" variant="outlined" color="inherit" onClick={resetForm}>
                 Cancel
@@ -347,14 +366,14 @@ export function UsersPage(): React.JSX.Element {
         </Paper>
       )}
 
-      {isLoading ? (
+      {isLoading && items.length === 0 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
       ) : visibleItems.length === 0 ? (
         <Typography>No users found</Typography>
       ) : (
-        <Paper elevation={1}>
+        <Paper elevation={1} sx={{ opacity: isPending || isLoading ? 0.6 : 1, transition: 'opacity 0.2s' }}>
           <TableContainer>
             <Table>
               <TableHead>
@@ -385,10 +404,18 @@ export function UsersPage(): React.JSX.Element {
               Page {filters.page} of {totalPages} (Total: {totalCount} users)
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button variant="contained" onClick={() => setPage(filters.page - 1)} disabled={!hasPrevPage}>
+              <Button
+                variant="contained"
+                onClick={() => changeList(() => setPage(filters.page - 1))}
+                disabled={!hasPrevPage}
+              >
                 Previous
               </Button>
-              <Button variant="contained" onClick={() => setPage(filters.page + 1)} disabled={!hasNextPage}>
+              <Button
+                variant="contained"
+                onClick={() => changeList(() => setPage(filters.page + 1))}
+                disabled={!hasNextPage}
+              >
                 Next
               </Button>
             </Box>

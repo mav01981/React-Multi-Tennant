@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useActionState } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -16,7 +16,7 @@ export function ProfilePage(): React.JSX.Element {
   const user = useAuthStore((state) => state.user)
   const [names, setNames] = useState<UpdateProfileRequest>({ firstName: '', lastName: '' })
   const [passwords, setPasswords] = useState<ChangePasswordRequest>({ currentPassword: '', newPassword: '' })
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const addToast = useUiStore((state) => state.addToast)
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function ProfilePage(): React.JSX.Element {
       .catch((err: unknown) => {
         // Ignore errors caused by unmounting (abort) — the component is gone.
         if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Failed to load profile')
+          setLoadError(err instanceof Error ? err.message : 'Failed to load profile')
         }
       })
     return () => controller.abort()
@@ -42,32 +42,47 @@ export function ProfilePage(): React.JSX.Element {
     if (user) setNames({ firstName: user.firstName, lastName: user.lastName })
   }, [user])
 
-  async function updateProfile(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+  // Each form gets its own useActionState: error + pending + action in one hook.
+  // isPending disables the submit buttons, preventing double-submits.
+  const [profileError, submitProfile, isSavingProfile] = useActionState(
+    async (_prev: string | null, names: UpdateProfileRequest): Promise<string | null> => {
+      try {
+        const updated = await usersApi.updateMe(names)
+        useAuthStore.getState().setUser(updated)
+        addToast('Profile updated', 'success')
+        return null
+      } catch (err) {
+        return err instanceof Error ? err.message : 'Failed to update profile'
+      }
+    },
+    null
+  )
+
+  const [passwordError, submitPassword, isChangingPassword] = useActionState(
+    async (_prev: string | null, passwords: ChangePasswordRequest): Promise<string | null> => {
+      if (!passwordPolicy.test(passwords.newPassword)) {
+        return 'New password must be at least 8 characters and include upper, lower, number, and special characters.'
+      }
+      try {
+        await usersApi.changePassword(passwords)
+        setPasswords({ currentPassword: '', newPassword: '' })
+        addToast('Password changed', 'success')
+        return null
+      } catch (err) {
+        return err instanceof Error ? err.message : 'Failed to change password'
+      }
+    },
+    null
+  )
+
+  const updateProfile = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    setError(null)
-    try {
-      const updated = await usersApi.updateMe(names)
-      useAuthStore.getState().setUser(updated)
-      addToast('Profile updated', 'success')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update profile')
-    }
+    submitProfile(names)
   }
 
-  async function changePassword(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+  const changePassword = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    setError(null)
-    if (!passwordPolicy.test(passwords.newPassword)) {
-      setError('New password must be at least 8 characters and include upper, lower, number, and special characters.')
-      return
-    }
-    try {
-      await usersApi.changePassword(passwords)
-      setPasswords({ currentPassword: '', newPassword: '' })
-      addToast('Password changed', 'success')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to change password')
-    }
+    submitPassword(passwords)
   }
 
   return (
@@ -75,9 +90,9 @@ export function ProfilePage(): React.JSX.Element {
       <Typography variant="h4" component="h1" gutterBottom>
         My profile
       </Typography>
-      {error && (
+      {loadError && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+          {loadError}
         </Alert>
       )}
 
@@ -86,6 +101,7 @@ export function ProfilePage(): React.JSX.Element {
           Profile details
         </Typography>
         <Box component="form" onSubmit={updateProfile} sx={{ display: 'grid', gap: 2 }}>
+          {profileError && <Alert severity="error">{profileError}</Alert>}
           <TextField
             label="First name"
             required
@@ -102,8 +118,8 @@ export function ProfilePage(): React.JSX.Element {
             onChange={(event) => setNames({ ...names, lastName: event.target.value })}
             fullWidth
           />
-          <Button type="submit" variant="contained" sx={{ justifySelf: 'start' }}>
-            Save profile
+          <Button type="submit" variant="contained" disabled={isSavingProfile} sx={{ justifySelf: 'start' }}>
+            {isSavingProfile ? 'Saving…' : 'Save profile'}
           </Button>
         </Box>
       </Paper>
@@ -113,6 +129,7 @@ export function ProfilePage(): React.JSX.Element {
           Change password
         </Typography>
         <Box component="form" onSubmit={changePassword} sx={{ display: 'grid', gap: 2 }}>
+          {passwordError && <Alert severity="error">{passwordError}</Alert>}
           <TextField
             label="Current password"
             type="password"
@@ -130,8 +147,8 @@ export function ProfilePage(): React.JSX.Element {
             fullWidth
             helperText="At least 8 characters with upper, lower, number, and special characters."
           />
-          <Button type="submit" variant="contained" sx={{ justifySelf: 'start' }}>
-            Change password
+          <Button type="submit" variant="contained" disabled={isChangingPassword} sx={{ justifySelf: 'start' }}>
+            {isChangingPassword ? 'Changing…' : 'Change password'}
           </Button>
         </Box>
       </Paper>

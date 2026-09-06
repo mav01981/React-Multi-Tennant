@@ -35,9 +35,10 @@ function renderLogin(): ReturnType<typeof render> {
   )
 }
 
-async function submitCredentials(email: string, password: string): Promise<void> {
+async function submitCredentials(tenantSlug: string, email: string, password: string): Promise<void> {
   const user = userEvent.setup()
   // MUI appends a required '*' to the label text, so match loosely.
+  await user.type(screen.getByLabelText(/workspace/i), tenantSlug)
   await user.type(screen.getByLabelText(/email/i), email)
   await user.type(screen.getByLabelText(/password/i), password)
   await user.click(screen.getByRole('button', { name: 'Sign in' }))
@@ -64,7 +65,7 @@ describe('LoginPage', () => {
     })
 
     renderLogin()
-    await submitCredentials('ann@example.com', 'pw')
+    await submitCredentials('ACME ', 'ann@example.com', 'pw')
 
     expect(await screen.findByText('HOME_MARKER')).toBeInTheDocument()
     expect(useAuthStore.getState().accessToken).toBe('access-token')
@@ -75,7 +76,7 @@ describe('LoginPage', () => {
     authApiMock.login.mockRejectedValue(new ApiClientError(401, ERROR_CODE.INVALID_CREDENTIALS, 'Invalid credentials'))
 
     renderLogin()
-    await submitCredentials('ann@example.com', 'wrong')
+    await submitCredentials('acme', 'ann@example.com', 'wrong')
 
     expect(await screen.findByText('Email or password is incorrect.')).toBeInTheDocument()
   })
@@ -84,7 +85,7 @@ describe('LoginPage', () => {
     authApiMock.login.mockRejectedValue(new ApiClientError(423, ERROR_CODE.ACCOUNT_LOCKED, 'Account locked'))
 
     renderLogin()
-    await submitCredentials('ann@example.com', 'pw')
+    await submitCredentials('acme', 'ann@example.com', 'pw')
 
     expect(await screen.findByText('Account is locked. Contact support.')).toBeInTheDocument()
   })

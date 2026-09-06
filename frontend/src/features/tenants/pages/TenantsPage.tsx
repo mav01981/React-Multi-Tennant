@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useOptimistic, useState, startTransition } from 'react'
+import { useCallback, useEffect, useActionState, useOptimistic, useState, startTransition, useTransition } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -39,6 +39,17 @@ export function TenantsPage(): React.JSX.Element {
   const deleteTenant = useTenantsStore((s) => s.deleteItem)
   const addToast = useUiStore((s) => s.addToast)
 
+  // Pagination/filter changes run inside a transition so the current rows stay
+  // mounted (dimmed) while the next page loads. The full-screen spinner is
+  // reserved for the true initial load only. (Named startListTransition because
+  // the top-level startTransition below serves the optimistic delete path.)
+  const [isPending, startListTransition] = useTransition()
+  const changeList = (update: () => void): void => startListTransition(update)
+
+  // Per-row status-toggle feedback: true while the Suspend/Reactivate request is
+  // in flight (see toggleStatus below).
+  const [isToggling, startToggling] = useTransition()
+
   // Optimistic delete (React 19): rows vanish from the table the moment delete is
   // confirmed, before the API round-trip. The store still owns the truth — if the
   // delete fails, React reverts the optimistic state when the transition settles
@@ -50,12 +61,11 @@ export function TenantsPage(): React.JSX.Element {
   const [searchInput, setSearchInput] = useState(filters.search)
   const debouncedSearch = useDebouncedValue(searchInput, 300)
   const {
-    state: { showCreate, editingId, form, formError, deleteTarget, deleteError },
+    state: { showCreate, editingId, form, deleteTarget, deleteError },
     openCreate,
     startEdit,
     resetForm,
     updateForm,
-    setFormError,
     openDelete,
     closeDelete,
     setDeleteError
@@ -82,40 +92,53 @@ export function TenantsPage(): React.JSX.Element {
     [startEdit]
   )
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  // Create/edit submit via useActionState: error + pending state + action in one
+  // hook. isPending disables the submit button, preventing double-submits. The
+  // editor state is snapshotted into the payload since actions run deferred.
+  const [formError, submitTenantForm, isSubmitting] = useActionState(
+    async (
+      _prev: string | null,
+      payload: { editingId: string | null; form: typeof EMPTY_FORM }
+    ): Promise<string | null> => {
+      const { name, displayName, slug } = payload.form
+      try {
+        if (payload.editingId) {
+          await updateTenant(payload.editingId, { name, displayName })
+          addToast('Tenant updated', 'success')
+        } else {
+          await createTenant({ name, displayName: displayName || name, slug: slug.trim().toLowerCase() })
+          addToast('Tenant created', 'success')
+        }
+        resetForm()
+        return null
+      } catch (err) {
+        if (err instanceof ApiClientError && err.code === 'SLUG_EXISTS') {
+          return 'A tenant with this slug already exists.'
+        }
+        return err instanceof Error ? err.message : 'Request failed'
+      }
+    },
+    null
+  )
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
     e.preventDefault()
-    setFormError(null)
-    try {
-      if (editingId) {
-        await updateTenant(editingId, { name: form.name, displayName: form.displayName })
-        addToast('Tenant updated', 'success')
-      } else {
-        await createTenant({
-          name: form.name,
-          displayName: form.displayName || form.name,
-          slug: form.slug.trim().toLowerCase()
-        })
-        addToast('Tenant created', 'success')
-      }
-      resetForm()
-    } catch (err) {
-      if (err instanceof ApiClientError && err.code === 'SLUG_EXISTS') {
-        setFormError('A tenant with this slug already exists.')
-      } else {
-        setFormError(err instanceof Error ? err.message : 'Request failed')
-      }
-    }
+    submitTenantForm({ editingId, form })
   }
 
   const toggleStatus = useCallback(
-    async (tenant: TenantDto) => {
+    (tenant: TenantDto) => {
       const next = tenant.status === 'active' ? 'suspended' : 'active'
-      try {
-        await updateTenant(tenant.id, { status: next })
-        addToast(`Tenant ${next === 'suspended' ? 'suspended' : 'reactivated'}`, 'success')
-      } catch (err) {
-        addToast(err instanceof Error ? err.message : 'Failed to change status', 'error')
-      }
+      // Async transition: isPending stays true until the request settles, so the
+      // row's chip can disable + spin instead of giving no feedback on click.
+      startToggling(async () => {
+        try {
+          await updateTenant(tenant.id, { status: next })
+          addToast(`Tenant ${next === 'suspended' ? 'suspended' : 'reactivated'}`, 'success')
+        } catch (err) {
+          addToast(err instanceof Error ? err.message : 'Failed to change status', 'error')
+        }
+      })
     },
     [updateTenant, addToast]
   )
@@ -166,14 +189,14 @@ export function TenantsPage(): React.JSX.Element {
         </Alert>
       )}
 
-      {isLoading ? (
+      {isLoading && items.length === 0 ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
       ) : visibleItems.length === 0 ? (
         <Typography>No tenants found</Typography>
       ) : (
-        <Paper elevation={1}>
+        <Paper elevation={1} sx={{ opacity: isPending || isLoading ? 0.6 : 1, transition: 'opacity 0.2s' }}>
           <TableContainer>
             <Table>
               <TableHead>
@@ -190,6 +213,7 @@ export function TenantsPage(): React.JSX.Element {
                   <TenantRow
                     key={tenant.id}
                     tenant={tenant}
+                    isToggling={isToggling}
                     onEdit={startEditTenant}
                     onToggleStatus={toggleStatus}
                     onDelete={openDelete}
@@ -204,10 +228,18 @@ export function TenantsPage(): React.JSX.Element {
               Page {filters.page} of {totalPages} (Total: {totalCount} tenants)
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button variant="contained" onClick={() => setPage(filters.page - 1)} disabled={!hasPrevPage}>
+              <Button
+                variant="contained"
+                onClick={() => changeList(() => setPage(filters.page - 1))}
+                disabled={!hasPrevPage}
+              >
                 Previous
               </Button>
-              <Button variant="contained" onClick={() => setPage(filters.page + 1)} disabled={!hasNextPage}>
+              <Button
+                variant="contained"
+                onClick={() => changeList(() => setPage(filters.page + 1))}
+                disabled={!hasNextPage}
+              >
                 Next
               </Button>
             </Box>
@@ -240,8 +272,8 @@ export function TenantsPage(): React.JSX.Element {
             <Button type="button" onClick={resetForm} color="inherit">
               Cancel
             </Button>
-            <Button type="submit" variant="contained" disabled={!form.name.trim() || (!editingId && !form.slug.trim())}>
-              {editingId ? 'Save' : 'Create'}
+            <Button type="submit" variant="contained" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving…' : editingId ? 'Save' : 'Create'}
             </Button>
           </DialogActions>
         </Box>

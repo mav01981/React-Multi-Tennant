@@ -17,7 +17,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "cd .. && husky frontend/.husky"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -52,11 +52,5 @@
     "typescript-eslint": "^8.69.0",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"
-  },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "bash -c 'tsc --noEmit'",
-      "eslint --fix --max-warnings 0"
-    ]
   }
 }
