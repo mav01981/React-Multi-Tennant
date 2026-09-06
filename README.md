@@ -12,7 +12,7 @@ Multi-tenant identity demo implementing the feature specs in [`docs/features/`](
 
 | Layer | Tech | Location |
 |-------|------|----------|
-| Frontend | React 18 + TypeScript + Zustand + MUI + Vite | [`frontend/`](frontend/) |
+| Frontend | React 19 + TypeScript + Zustand + MUI + Vite | [`frontend/`](frontend/) |
 | Backend | ASP.NET Core 10 (Identity) + EF Core | [`Identity.API/`](Identity.API/) and friends |
 | E2E tests | Playwright (chromium) | [`frontend/e2e/`](frontend/e2e/) |
 
@@ -89,6 +89,7 @@ npm run test:e2e
 - API client implements the **single-flight refresh + replay** interceptor — `src/shared/api/client.ts`; it also attaches `X-Tenant-Id` on every request.
 - Hydration: `src/app/main.tsx` calls `fetchCurrentUser()` and loads the role catalog before first render (silent re-auth).
 - Light/dark theme is a client-side preference persisted in `localStorage` (`themeMode`) — not synced to the backend.
+- **React 19** — list-row deletion is optimistic via `useOptimistic` + async `startTransition` (`UsersPage` / `TenantsPage`): the row vanishes on confirm and auto-reverts if the delete fails. Zustand remains the source of truth.
 
 ## CI
 

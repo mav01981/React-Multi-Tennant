@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useOptimistic, useState, startTransition } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -38,6 +38,14 @@ export function TenantsPage(): React.JSX.Element {
   const updateTenant = useTenantsStore((s) => s.updateItem)
   const deleteTenant = useTenantsStore((s) => s.deleteItem)
   const addToast = useUiStore((s) => s.addToast)
+
+  // Optimistic delete (React 19): rows vanish from the table the moment delete is
+  // confirmed, before the API round-trip. The store still owns the truth — if the
+  // delete fails, React reverts the optimistic state when the transition settles
+  // and the row reappears with the store error shown above the table.
+  const [visibleItems, hideDeletedRow] = useOptimistic(items, (current, deletedId: string) =>
+    current.filter((tenant) => tenant.id !== deletedId)
+  )
 
   const [searchInput, setSearchInput] = useState(filters.search)
   const debouncedSearch = useDebouncedValue(searchInput, 300)
@@ -112,16 +120,22 @@ export function TenantsPage(): React.JSX.Element {
     [updateTenant, addToast]
   )
 
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (!deleteTarget) return
     setDeleteError(null)
-    try {
-      await deleteTenant(deleteTarget.id)
-      addToast('Tenant deleted', 'success')
-      closeDelete()
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Delete failed')
-    }
+    const deletedId = deleteTarget.id
+    // startTransition with an async action is what makes useOptimistic revert on
+    // failure: React discards the optimistic value when the action settles.
+    startTransition(async () => {
+      hideDeletedRow(deletedId)
+      try {
+        await deleteTenant(deletedId)
+        addToast('Tenant deleted', 'success')
+        closeDelete()
+      } catch (err) {
+        setDeleteError(err instanceof Error ? err.message : 'Delete failed')
+      }
+    })
   }
 
   return (
@@ -156,7 +170,7 @@ export function TenantsPage(): React.JSX.Element {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress />
         </Box>
-      ) : items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <Typography>No tenants found</Typography>
       ) : (
         <Paper elevation={1}>
@@ -172,7 +186,7 @@ export function TenantsPage(): React.JSX.Element {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {items.map((tenant) => (
+                {visibleItems.map((tenant) => (
                   <TenantRow
                     key={tenant.id}
                     tenant={tenant}

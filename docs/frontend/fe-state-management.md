@@ -1,7 +1,7 @@
 # Frontend: State Management (Zustand)
 
 > **Scope:** Frontend-only — how the React client manages application state.
-> **Stack:** React 18 + TypeScript + Vite + Zustand (see `adr/0001-react-frontend-stack.md`).
+> **Stack:** React 19 + TypeScript + Vite + Zustand (see `adr/0001-react-frontend-stack.md`).
 > **Code:** `frontend/src/features/*/*.store.ts`, `frontend/src/shared/ui/ui.store.ts`.
 
 ---
@@ -119,6 +119,44 @@ setAuthHandlers({
 - `setPage` clamps to `[1, totalPages]` and refetches.
 - Mutating actions update `items`/`totalCount` from the API response and
   re-throw on failure so the page keeps its own error handling.
+
+### Optimistic delete (React 19 `useOptimistic`)
+
+Row deletion is **optimistic at the component layer** (React 19), while the
+store remains the source of truth and still refetches after a successful
+mutation. `UsersPage` / `TenantsPage` wrap the store's `items` with
+`useOptimistic`, and the delete confirm handler runs inside an async
+`startTransition` — React applies the optimistic filter immediately and
+**discards it when the action settles**:
+
+- On success the store refetches and the real `items` no longer contain the
+  row, so the optimistic state simply matches reality.
+- On failure the store throws without mutating `items`; the optimistic value
+  is reverted, the row reappears, and the store `error` / dialog
+  `deleteError` surfaces the reason.
+
+```tsx
+const [visibleItems, hideDeletedRow] = useOptimistic(
+  items,
+  (current, deletedId: string) => current.filter((u) => u.id !== deletedId)
+)
+
+const confirmDelete = () => {
+  const deletedId = deleteTarget.id
+  startTransition(async () => {
+    hideDeletedRow(deletedId)          // row vanishes immediately
+    try {
+      await deleteUser(deletedId)      // store delete + refetch
+    } catch {
+      // optimistic state auto-reverts; store error is shown above the table
+    }
+  })
+}
+```
+
+Create and update remain non-optimistic (await → store refetch) because a
+failed create has no meaningful placeholder to roll back to, and the refetch
+keeps pagination/counts authoritative.
 
 ### Request-cancellation race guard
 

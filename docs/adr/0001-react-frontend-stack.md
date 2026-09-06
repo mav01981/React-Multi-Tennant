@@ -9,7 +9,7 @@ The client needs a typed single-page application with guarded routes, shared aut
 
 ## Decision
 
-Use React 18 with TypeScript, Vite, and Zustand:
+Use React 19 with TypeScript, Vite, and Zustand:
 
 - React provides the component and routing host.
 - TypeScript defines API and store contracts at compile time.
@@ -19,6 +19,15 @@ Use React 18 with TypeScript, Vite, and Zustand:
 ## Consequences
 
 The frontend stays small and feature-oriented with minimal framework overhead. State updates are explicit and selector-based.
+
+## Amended: React 18 → 19
+
+The frontend was upgraded from React 18.3.1 to **React 19** (no API breaking
+changes were needed — the app already used the `createRoot` API). The upgrade
+was driven by adopting `useOptimistic` for the list pages' delete flows: rows
+disappear immediately on confirm and are auto-reverted by React's action model
+if the delete fails, without moving list state out of Zustand. See
+`docs/frontend/fe-state-management.md` ("Optimistic delete") for the pattern.
 
 ## Code Splitting (lazy routes)
 
