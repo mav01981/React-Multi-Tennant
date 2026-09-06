@@ -13,7 +13,9 @@ export default tseslint.config(
       'playwright-report/**',
       'test-results/**',
       '*.tsbuildinfo',
-      '*.tsbuildinfo.*'
+      '*.tsbuildinfo.*',
+      '.lighthanterc.cjs',
+      '.lighthouserc.cjs'
     ]
   },
 
@@ -24,12 +26,23 @@ export default tseslint.config(
   // keep lint fast and orthogonal to `tsc`/`npm run typecheck`).
   ...tseslint.configs.recommended,
 
-  // Applies to all frontend source + tooling config. Browser globals for `src`,
+    // Applies to all frontend source + tooling config. Browser globals for `src`,
   // Node globals for config/tooling files (both are TS here).
   {
-    files: ['src/**/*.{ts,tsx}', 'vite.config.ts', 'playwright.config.ts', 'scripts/**/*.{mjs,cjs}'],
+    files: ['src/**/*.{ts,tsx}', 'vite.config.ts', 'playwright.config.ts', 'scripts/**/*.{mjs,cjs}', '.lighthanterc.cjs', '**/*.cjs'],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node }
+    }
+  },
+
+  // CommonJS config/script files legitimately use require() — the
+  // no-require-imports rule (from tseslint.recommended) targets TS source,
+  // not .cjs files. Turn it off for the *.cjs glob so LHCI/puppeteer CJS
+  // tooling lints cleanly.
+  {
+    files: ['**/*.cjs'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off'
     }
   },
 
